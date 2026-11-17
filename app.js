@@ -351,7 +351,26 @@ function render(focusSel) {
   typeset(main);
   if (focusSel) { var el = document.getElementById(focusSel); if (el) el.focus({ preventScroll: true }); }
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
+  updateReport();
   save();
+}
+/* prefill the GitHub issue with where the reader is */
+function updateReport() {
+  var a = document.getElementById("report");
+  if (!a) return;
+  var base = "https://github.com/machmar-claude/nai-sbirka/issues/new";
+  var where, title;
+  if (st.view === "vzory" || st.view === "tahak") {
+    where = st.view === "vzory" ? "Stránka: Vzory" : "Stránka: Co na tahák";
+    title = st.view === "vzory" ? "[Vzory] " : "[Tahák] ";
+  } else {
+    var p = PROBS[st.pi], mode = curMode(p);
+    var step = mode === "learn" ? "Pochopit, krok " + (st.ns + 1) : "Procvičit, krok " + (focusIdx(p) + 1);
+    where = "Příklad: " + p.id + " · " + p.m.title + "\nRežim: " + step;
+    title = "[" + p.id + "] ";
+  }
+  var body = where + "\nOdkaz: " + location.href + "\n\nCo je špatně (a jak by to mělo být):\n\n";
+  a.href = base + "?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body);
 }
 function applyTheme() {
   var r = document.documentElement;
