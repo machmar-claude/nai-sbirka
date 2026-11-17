@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NAI · sbírka příkladů</title>
+<meta name="description" content="NAI · sbírka příkladů: vysvětlení a procvičování po krocích (MPC-NAI, FEKT VUT)">
+<script>
+/* apply the saved theme before first paint */
+try { var s = JSON.parse(localStorage.getItem("nai-sbirka-v1") || "null"); if (s && (s.theme === "light" || s.theme === "dark")) document.documentElement.setAttribute("data-theme", s.theme); } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [["$", "$"], ["\\(", "\\)"]], displayMath: [["\\[", "\\]"], ["$$", "$$"]] },
+  svg: { fontCache: "global" },
+  options: { skipHtmlTags: ["script", "style", "textarea", "input", "button"] },
+  startup: {
+    typeset: false,
+    ready: function () {
+      MathJax.startup.defaultReady();
+      MathJax.startup.promise.then(function () { if (window.__typeset) window.__typeset(); });
+    }
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" defer></script>
+</head>
+<body>
+<div class="app" id="app">
+  <aside>
+    <div class="side-top">
+      <div class="brand">
+        <div><b>NAI · sbírka</b><span>Metody návrhu analogových IO · 61 příkladů + K1–K11</span></div>
+        <button class="iconbtn" id="theme" type="button" title="Přepnout světlý a tmavý vzhled" aria-label="Přepnout světlý a tmavý vzhled">◐</button>
+      </div>
+      <nav class="navtabs" id="tabs" aria-label="Sekce"></nav>
+      <div class="search"><input id="q" type="search" placeholder="Hledat: číslo, název, vzor…" aria-label="Hledat příklad" autocomplete="off"></div>
+    </div>
+    <ul class="list" id="list"></ul>
+    <details class="side-foot" id="foot">
+      <summary id="prog"></summary>
+      <div class="foot-body">
+        <button class="btn" type="button" data-sys="export">Exportovat postup</button>
+        <button class="btn" type="button" data-sys="import">Importovat postup</button>
+        <button class="btn danger" type="button" data-sys="reset">Smazat postup</button>
+        <div id="confirm"></div>
+        <p class="msg" id="msg" role="status" aria-live="polite"></p>
+        <input type="file" id="file" accept="application/json,.json" class="sr" tabindex="-1" aria-hidden="true">
+      </div>
+    </details>
+  </aside>
+  <main id="main"><noscript><div class="sheet"><p>Pro zobrazení příkladů je potřeba JavaScript.</p></div></noscript></main>
+</div>
+<script src="data/nai.js"></script>
+<script src="data/patterns.js"></script>
+<script src="data/mpc.js"></script>
+<script src="data/link.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
