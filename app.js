@@ -294,6 +294,7 @@ function practiceHtml(p) {
 }
 function overlayItems(p, mode) {
   if (!p.nai) return { items: [], src: "" };
+  if (st.clean) return { items: [], src: "Zobrazeno původní schéma bez zvýraznění." };
   if (mode === "learn") {
     if (st.allhl) { var a = []; p.nai.steps.forEach(function (s) { a = a.concat(resolve(p.nai, s.h)); }); return { items: a, src: "" }; }
     return { items: resolve(p.nai, p.nai.steps[st.ns] ? p.nai.steps[st.ns].h : []), src: "" };
@@ -321,7 +322,9 @@ function renderExample() {
   return '<div class="sheet">' + headHtml(p) + taskHtml(p) +
     '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '">' + o.svg + "</div>" +
     '<figcaption class="legend">' + lg + "</figcaption>" +
-    (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked" : "") + "> zvýraznit vše najednou</label>" : "") + "</figure>" +
+    (p.nai ? '<div class="opts">' +
+      (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
+      '<label><input type="checkbox" id="clean" ' + (st.clean ? "checked" : "") + "> původní schéma bez anotací</label></div>" : "") + "</figure>" +
     '<div class="col">' + ctl + (mode === "learn" ? learnHtml(p) : practiceHtml(p)) + "</div></div></div>";
 }
 
@@ -516,6 +519,7 @@ document.addEventListener("click", function (ev) {
 });
 document.addEventListener("change", function (ev) {
   if (ev.target.id === "allhl") { st.allhl = ev.target.checked; render(); }
+  if (ev.target.id === "clean") { st.clean = ev.target.checked; render(); }
   if (ev.target.id === "file") doImport(ev.target.files && ev.target.files[0]);
 });
 document.addEventListener("input", function (ev) {
