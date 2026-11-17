@@ -22,7 +22,7 @@ var PROBS = MPC.map(function (m) {
 });
 
 /* ---------- state + persistence ---------- */
-var st = { view: "ex", pi: 0, mode: "practice", ns: 0, pf: null, showall: false, allhl: false,
+var st = { view: "ex", pi: 0, mode: "learn", ns: 0, pf: null, showall: false, allhl: false,
            known: {}, prog: {}, patFocus: null, theme: null, lastId: null, q: "", confirmReset: false };
 
 function pg(p) {
@@ -79,7 +79,7 @@ function load() {
     var s = JSON.parse(raw);
     if (!s || typeof s !== "object") return;
     mergeState(s);
-    if (s.mode === "learn" || s.mode === "practice") st.mode = s.mode;
+    /* The page always opens in Pochopit; the saved mode is not restored. */
     if (s.theme === "light" || s.theme === "dark") st.theme = s.theme;
     var i = PROBS.findIndex(function (p) { return p.id === s.last; });
     if (i >= 0) { st.pi = i; st.lastId = PROBS[i].id; if (typeof s.ns === "number" && s.ns >= 0) st.ns = s.ns | 0; }
