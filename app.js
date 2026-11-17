@@ -179,12 +179,23 @@ function renderSide() {
   var tabs = [["ex", "Příklady"], ["vzory", "Vzory"], ["tahak", "Co na tahák"]];
   $("#tabs").innerHTML = tabs.map(function (t) { return '<button type="button" data-tab="' + t[0] + '" aria-current="' + (t[0] === st.view) + '">' + t[1] + "</button>"; }).join("");
   var h = "", last = null, shown = 0;
+  /* Mobile strip: each chapter is a tile; only the open chapter's problems show (CSS hides .fold). Search shows all matches. */
+  if (!st.openCh) st.openCh = PROBS[st.pi].ch;
+  var folding = !st.q;
   PROBS.forEach(function (p, i) {
     if (!matches(p)) return;
     shown++;
-    if (p.ch !== last) { h += '<li class="group">' + CHAP[p.ch] + "</li>"; last = p.ch; }
+    if (p.ch !== last) {
+      h += '<li class="group">' + CHAP[p.ch] + "</li>";
+      if (folding) {
+        var inCh = PROBS.filter(function (x) { return x.ch === p.ch; });
+        var knCh = inCh.filter(function (x) { return st.known[x.id]; }).length, open = st.openCh === p.ch;
+        h += '<li class="chtile"><button type="button" data-chap="' + p.ch + '" aria-expanded="' + open + '"><span class="n">' + p.ch + '</span><span class="t">' + CHAP[p.ch] + '</span><span class="k"><span>' + inCh.length + " příkladů · umím " + knCh + "</span><span>" + (open ? "▾ otevřeno" : "▸ otevřít") + "</span></span></button></li>";
+      }
+      last = p.ch;
+    }
     var k = pinsHtml(p) + (st.known[p.id] ? '<span class="known">✓ umím</span>' : "") + "<span>" + esc(p.m.kind) + "</span>";
-    h += '<li><button type="button" data-pi="' + i + '" aria-current="' + (st.view === "ex" && i === st.pi) + '"><span class="n">' + p.id + '</span><span class="t">' + fmt(p.m.title) + '</span><span class="k">' + k + "</span></button></li>";
+    h += '<li' + (folding && p.ch !== st.openCh ? ' class="fold"' : "") + '><button type="button" data-pi="' + i + '" aria-current="' + (st.view === "ex" && i === st.pi) + '"><span class="n">' + p.id + '</span><span class="t">' + fmt(p.m.title) + '</span><span class="k">' + k + "</span></button></li>";
   });
   if (!shown) h = '<li class="nores">Nic nenalezeno.</li>';
   $("#list").innerHTML = h;
@@ -381,7 +392,7 @@ function applyTheme() {
 function showProblem(i) {
   var p = PROBS[i], changed = st.lastId !== p.id;
   if (changed) { st.ns = 0; st.pf = null; st.allhl = false; }
-  st.view = "ex"; st.pi = i; st.lastId = p.id; st.patFocus = null;
+  st.view = "ex"; st.pi = i; st.lastId = p.id; st.patFocus = null; st.openCh = p.ch;
   render();
   if (changed) { window.scrollTo(0, 0); scrollListToCurrent(); }
 }
@@ -474,6 +485,12 @@ document.addEventListener("click", function (ev) {
   }
   if (d.tab) { if (d.tab === "ex") go(st.pi); else goPage(d.tab); return; }
   if (d.pi) { go(+d.pi); return; }
+  if (d.chap) {
+    st.openCh = d.chap; renderSide();
+    var tile = document.querySelector('#list [data-chap="' + d.chap + '"]');
+    if (tile) $("#list").scrollLeft = Math.max(0, tile.parentNode.offsetLeft);
+    return;
+  }
   if (d.go) { go(+d.go); return; }
   if (d.mode) { st.mode = d.mode; render(); return; }
   if (d.k) { st.ns = +d.k; render(); return; }
