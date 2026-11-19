@@ -55,11 +55,20 @@ window.MathJax = {
   </aside>
   <main id="main"><noscript><div class="sheet"><p>Pro zobrazení příkladů je potřeba JavaScript.</p></div></noscript></main>
 </div>
+<div class="drawer" id="drawer">
+  <button class="dhandle" id="dhandle" type="button" aria-expanded="false" aria-controls="dpanel" aria-label="Vzorce a konstanty" title="Vzorce a konstanty — klikni pro otevření, táhni pro posun"><span aria-hidden="true">«</span></button>
+  <section class="dpanel" id="dpanel" aria-label="Vzorce a konstanty">
+    <div class="dhead">Vzorce a konstanty</div>
+    <div class="dbody" id="dbody" tabindex="0"></div>
+    <div class="dgrip" id="dgrip" title="Táhni pro změnu výšky"></div>
+  </section>
+</div>
 <a class="report" id="report" href="https://github.com/machmar-claude/nai-sbirka/issues/new" target="_blank" rel="noopener" title="Otevře nové hlášení na GitHubu (je potřeba účet GitHub)">Nahlásit chybu</a>
 <script src="data/nai.js"></script>
 <script src="data/patterns.js"></script>
 <script src="data/mpc.js"></script>
 <script src="data/link.js"></script>
+<script src="data/vzorce.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

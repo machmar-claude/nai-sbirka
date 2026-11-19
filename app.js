@@ -24,6 +24,7 @@ var PROBS = MPC.map(function (m) {
 /* ---------- state + persistence ---------- */
 var st = { view: "ex", pi: 0, mode: "learn", ns: 0, pf: null, showall: false, allhl: false,
            known: {}, prog: {}, patFocus: null, theme: null, lastId: null, q: "", confirmReset: false };
+var DR = { open: false, top: 120, w: 380, h: 420 }; /* formula drawer geometry, px */
 
 function pg(p) {
   return st.prog[p.id] || (st.prog[p.id] = { ok: [], rev: [], hint: [], val: [], fb: [], plot: false });
@@ -37,7 +38,7 @@ function snapshot() {
   });
   var known = {};
   Object.keys(st.known).forEach(function (k) { if (st.known[k]) known[k] = true; });
-  return { v: 1, prog: prog, known: known, last: PROBS[st.pi].id, mode: st.mode, ns: st.ns, theme: st.theme };
+  return { v: 1, prog: prog, known: known, last: PROBS[st.pi].id, mode: st.mode, ns: st.ns, theme: st.theme, drawer: DR };
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) {}
@@ -81,6 +82,10 @@ function load() {
     mergeState(s);
     /* The page always opens in Pochopit; the saved mode is not restored. */
     if (s.theme === "light" || s.theme === "dark") st.theme = s.theme;
+    if (s.drawer && typeof s.drawer === "object") {
+      ["top", "w", "h"].forEach(function (k) { if (isFinite(s.drawer[k])) DR[k] = +s.drawer[k]; });
+      DR.open = s.drawer.open === true;
+    }
     var i = PROBS.findIndex(function (p) { return p.id === s.last; });
     if (i >= 0) { st.pi = i; st.lastId = PROBS[i].id; if (typeof s.ns === "number" && s.ns >= 0) st.ns = s.ns | 0; }
   } catch (e) {}
@@ -108,7 +113,7 @@ function typeset(el) {
     MathJax.typesetPromise([el]).catch(function () {});
   }
 }
-window.__typeset = function () { typeset($("#main")); };
+window.__typeset = function () { typeset($("#main")); typeset($("#dbody")); };
 function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 
 /* ---------- schematic overlay (from NAI průvodce) ---------- */
@@ -554,9 +559,50 @@ document.addEventListener("keydown", function (ev) {
 });
 window.addEventListener("hashchange", routeFromHash);
 
+/* ---------- formula drawer: click the handle to slide it, drag the handle to move it
+   up/down or (when open) push it back toward the edge, drag the bottom grip to resize ---------- */
+/* fit to the window for display only, so a small window never overwrites the remembered size */
+function drFit(o) {
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var w = Math.max(160, Math.min(o.w, vw - 36)), h = Math.max(90, Math.min(o.h, vh - 16));
+  return { w: w, h: h, top: Math.max(8, Math.min(o.top, vh - h - 8)) };
+}
+function drApply() {
+  var d = $("#drawer"), p = $("#dpanel"), f = drFit(DR);
+  d.classList.toggle("open", DR.open);
+  d.style.top = f.top + "px"; d.style.setProperty("--dt", f.top + "px");
+  p.style.width = f.w + "px"; p.style.height = f.h + "px";
+  p.inert = !DR.open;
+  $("#dhandle").setAttribute("aria-expanded", String(DR.open));
+}
+function drDrag(el, move) {
+  var g = null;
+  el.addEventListener("pointerdown", function (e) { g = drFit(DR); g.x = e.clientX; g.y = e.clientY; g.moved = false; el.setPointerCapture(e.pointerId); el.moved = false; });
+  el.addEventListener("pointermove", function (e) {
+    if (!g) return;
+    var dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.moved && Math.abs(dx) + Math.abs(dy) < 6) return; /* below this it is a click */
+    g.moved = el.moved = true;
+    move(g, dx, dy); var f = drFit(DR); DR.top = f.top; DR.w = f.w; DR.h = f.h; drApply();
+  });
+  function end() { if (g && g.moved) save(); g = null; }
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+}
+drDrag($("#dhandle"), function (g, dx, dy) { DR.top = g.top + dy; if (DR.open) DR.w = g.w - dx; });
+drDrag($("#dgrip"), function (g, dx, dy) { DR.h = g.h + dy; });
+$("#dhandle").addEventListener("click", function () {
+  if (this.moved) { this.moved = false; return; } /* the click that ends a drag */
+  DR.open = !DR.open; drApply(); save();
+});
+window.addEventListener("resize", drApply);
+$("#dbody").innerHTML = (window.VZORCE || []).map(function (g) {
+  return "<h3>" + esc(g.g) + "</h3><dl>" + g.f.map(function (x) { return "<dt>" + esc(x[0]) + "</dt><dd>$" + x[1] + "$</dd>"; }).join("") + "</dl>";
+}).join("");
+
 /* ---------- start ---------- */
 load();
 applyTheme();
+drApply();
 if (window.innerWidth > 760) { var ft = $("#foot"); if (ft) ft.open = true; }
 if (!routeFromHash()) {
   try { history.replaceState(null, "", "#" + PROBS[st.pi].m.id); } catch (e) {}
