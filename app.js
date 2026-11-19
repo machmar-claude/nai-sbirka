@@ -141,7 +141,7 @@ function overlay(W, H, items) {
       var pts = it.a.map(function (q) { return [q[0] * sx, q[1] * sy]; });
       var d = "M" + pts.map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" L");
       g += '<path d="' + d + '" fill="none" stroke="' + c + '" stroke-opacity=".28" stroke-width="' + fs * .55 + '" stroke-linejoin="round" stroke-linecap="round"/>';
-      g += '<path class="ov-arrow" d="' + d + '" fill="none" stroke="' + c + '" stroke-width="' + fs * .26 + '" stroke-dasharray="' + fs * .9 + " " + fs * .55 + '" stroke-linejoin="round" marker-end="url(#ah-' + ck + ')"/>';
+      g += '<path class="ov-arrow" d="' + d + '" fill="none" stroke="' + c + '" stroke-width="' + fs * .26 + '" stroke-dasharray="' + fs * .9 + " " + fs * .55 + '" style="--dp:' + -fs * 1.45 + '" stroke-linejoin="round" marker-end="url(#ah-' + ck + ')"/>';
       if (it.t) {
         var best = 0, bi = 0;
         for (var i = 0; i < pts.length - 1; i++) { var L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); if (L > best) { best = L; bi = i; } }
