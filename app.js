@@ -595,6 +595,11 @@ $("#dhandle").addEventListener("click", function () {
   DR.open = !DR.open; drApply(); save();
 });
 window.addEventListener("resize", drApply);
+/* classic scrollbars take layout width and the handle already sits beside them; overlay ones (width 0) draw over it,
+   so the closed handle gets 12px wider. Re-measured whenever the page width changes (e.g. the scrollbar appears). */
+new ResizeObserver(function () {
+  document.documentElement.style.setProperty("--sb", (window.innerWidth > document.documentElement.clientWidth ? 0 : 12) + "px");
+}).observe(document.documentElement);
 $("#dbody").innerHTML = (window.VZORCE || []).map(function (g) {
   return "<h3>" + esc(g.g) + "</h3><dl>" + g.f.map(function (x) { return "<dt>" + esc(x[0]) + "</dt><dd>$" + x[1] + "$</dd>"; }).join("") + "</dl>";
 }).join("");

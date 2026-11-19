@@ -272,11 +272,13 @@ main { padding-bottom: 56px; }
 @media print { .app > aside { display: none; } .app { display: block; } }
 
 /* ---------- formula drawer (closed: only the 28px handle shows) ---------- */
-.drawer { position: fixed; right: 0; top: 120px; z-index: 40; display: flex; align-items: center; transform: translateX(calc(100% - 21px)); transition: transform .35s cubic-bezier(.22, .9, .3, 1); }
+.drawer { position: fixed; right: 0; top: 120px; z-index: 40; display: flex; align-items: center; transform: translateX(calc(100% - 21px - var(--sb, 0px))); transition: transform .35s cubic-bezier(.22, .9, .3, 1); }
 .drawer.open { transform: none; }
 @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
 .dhandle { flex: none; width: 22px; height: 64px; margin-right: -1px; position: relative; z-index: 1; padding: 0; border: 1px solid var(--rule); border-right: 0; border-radius: 12px 0 0 12px; background: var(--sheet); box-shadow: -4px 4px 14px rgba(0, 0, 0, .14); color: var(--accent); font-size: 22px; cursor: grab; touch-action: none; user-select: none; }
 .dhandle:active { cursor: grabbing; }
+.dhandle { transition: width .35s, padding .35s; }
+.drawer:not(.open) .dhandle { width: calc(22px + var(--sb, 0px)); padding-right: var(--sb, 0px); } /* closed: extra width sits under an overlay scrollbar */
 .dhandle span { display: inline-block; transition: transform .35s; }
 .drawer.open .dhandle span { transform: scaleX(-1); }
 .dpanel { display: flex; flex-direction: column; width: 380px; height: 420px; max-height: calc(100vh - var(--dt, 120px) - 8px); position: relative; overflow: hidden; padding-bottom: 7px; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-right: 0; border-radius: 14px 0 0 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, .2); }
