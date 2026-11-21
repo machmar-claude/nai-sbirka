@@ -35,8 +35,12 @@ window.MathJax = {
     <div class="side-top">
       <div class="brand">
         <div><b>NAI · sbírka</b><span>Metody návrhu analogových IO · 61 příkladů + K1–K11</span></div>
-        <button class="iconbtn" id="theme" type="button" title="Přepnout světlý a tmavý vzhled" aria-label="Přepnout světlý a tmavý vzhled">◐</button>
+        <div class="brand-btns">
+          <button class="iconbtn" id="rtbtn" type="button" popovertarget="rtpop" title="Spolu: sdílet pohled, ukazatel a poznámky s dalšími počítači" aria-label="Spolu">⇄<b id="rtn"></b></button>
+          <button class="iconbtn" id="theme" type="button" title="Přepnout světlý a tmavý vzhled" aria-label="Přepnout světlý a tmavý vzhled">◐</button>
+        </div>
       </div>
+      <div class="rtpop" id="rtpop" popover><div id="rtbody"></div></div>
       <nav class="navtabs" id="tabs" aria-label="Sekce"></nav>
       <div class="search"><input id="q" type="search" placeholder="Hledat: číslo, název, vzor…" aria-label="Hledat příklad" autocomplete="off"></div>
     </div>

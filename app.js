@@ -372,6 +372,7 @@ function render(focusSel) {
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
   updateReport();
   save();
+  rtAfterRender();
 }
 /* prefill the GitHub issue with where the reader is */
 function updateReport() {
@@ -479,6 +480,18 @@ document.addEventListener("click", function (ev) {
   if (!t) return;
   var d = t.dataset;
   var p = PROBS[st.pi];
+  if (d.rt) {
+    if (d.rt === "create") rtJoin(newCode(), true);
+    else if (d.rt === "join") rtJoin(($("#rtcode") || {}).value, false);
+    else if (d.rt === "leave") rtLeave();
+    else if (d.rt === "copy") { var l = $("#rtlink"); (navigator.clipboard ? navigator.clipboard.writeText(l.value) : Promise.reject()).then(function () { rtMsg("Odkaz zkopírován."); }, function () { l.select(); rtMsg("Zkopíruj odkaz ručně (Ctrl+C)."); }); }
+    return;
+  }
+  if (d.pin) {
+    var q = RT && RT.pins[d.pin];
+    if (q && window.confirm(q.t ? "Smazat poznámku „" + q.t + "“ pro všechny?" : "Smazat tuto značku pro všechny?")) { delete RT.pins[d.pin]; RT.a.unpin.send(d.pin); drawShared(); }
+    return;
+  }
   if (d.sys) {
     if (d.sys === "export") doExport();
     else if (d.sys === "import") { var f = $("#file"); f.value = ""; f.click(); }
@@ -525,6 +538,7 @@ document.addEventListener("click", function (ev) {
 document.addEventListener("change", function (ev) {
   if (ev.target.id === "allhl") { st.allhl = ev.target.checked; render(); }
   if (ev.target.id === "clean") { st.clean = ev.target.checked; render(); }
+  if (ev.target.id === "rtfollow" && RT) RT.follow = ev.target.checked;
   if (ev.target.id === "file") doImport(ev.target.files && ev.target.files[0]);
 });
 document.addEventListener("input", function (ev) {
@@ -536,6 +550,7 @@ document.addEventListener("input", function (ev) {
 document.addEventListener("keydown", function (ev) {
   var tg = ev.target, i = tg.dataset && tg.dataset.inp;
   if (i != null) { if (ev.key === "Enter") { ev.preventDefault(); check(+i); } return; }
+  if (tg.id === "rtcode" && ev.key === "Enter") { rtJoin(tg.value, false); return; }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
   var tag = tg.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tg.isContentEditable) return;
@@ -558,6 +573,162 @@ document.addEventListener("keydown", function (ev) {
   }
 });
 window.addEventListener("hashchange", routeFromHash);
+
+/* ---------- Spolu: optional live room. Peers connect directly over WebRTC (Trystero, public Nostr relays only for the
+   handshake). The library is loaded only when someone creates or joins a room, so solo use never touches the network. ---------- */
+var RT = null;
+var TRYSTERO = "https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm";
+var PCOL = ["#e5484d", "#1e88e5", "#2e9e5b", "#8e44ad", "#ef6c00", "#00979c", "#d6409f"];
+function peerCol(id) { var h = 0; id = String(id); for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return PCOL[Math.abs(h) % PCOL.length]; }
+function newCode() { var a = "abcdefghjkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(6)), s = ""; for (var i = 0; i < 6; i++) s += a[r[i] % a.length]; return s; }
+function setUrlRoom(code) { var u = new URL(location.href); if (code) u.searchParams.set("room", code); else u.searchParams.delete("room"); history.replaceState(null, "", u.href); }
+function rtMsg(t) { var m = $("#rtmsg"); if (m) m.textContent = t; }
+function rtUi() {
+  var b = $("#rtbody"), n = RT ? Object.keys(RT.peers).length : 0;
+  $("#rtbtn").classList.toggle("on", !!RT);
+  $("#rtn").textContent = RT ? String(n + 1) : "";
+  if (!RT) {
+    b.innerHTML = "<h2>Spolu</h2><p>Otevřete sbírku na více počítačích a propojte je kódem. Uvidíte, kde je ten druhý, jeho ukazatel ve schématu a společné poznámky. Spojení jde přímo mezi prohlížeči, nic se nikam neukládá.</p>" +
+      '<button class="btn primary" type="button" data-rt="create">Vytvořit místnost</button>' +
+      '<div class="rtrow"><input id="rtcode" placeholder="nebo zadej kód místnosti" autocomplete="off" aria-label="Kód místnosti"><button class="btn" type="button" data-rt="join">Připojit</button></div><p class="msg" id="rtmsg" role="status"></p>';
+    return;
+  }
+  var url = new URL(location.href); url.hash = "";
+  b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")." : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
+    '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
+    '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
+    "<p>Ukazatel: najeď myší na schéma. Poznámka: dvojklik na schéma. Smazání: klik na poznámku.</p>" +
+    '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
+}
+function viewNow() {
+  var p = PROBS[st.pi];
+  return st.view !== "ex" ? { v: st.view } : { v: "ex", id: p.id, mode: curMode(p), ns: st.ns, pf: st.pf, allhl: !!st.allhl, clean: !!st.clean };
+}
+/* called from render(): broadcast my view when it changed, and redraw the shared layer */
+function rtAfterRender() {
+  if (!RT) return;
+  var v = viewNow(), k = JSON.stringify(v);
+  if (k !== RT.lastKey) { RT.lastKey = k; if (!RT.applying) RT.a.view.send(v); }
+  drawShared();
+}
+function applyView(d) {
+  if (!RT || !RT.follow || !d || typeof d !== "object") return;
+  RT.need = false;
+  RT.applying = true;
+  try {
+    if (d.v === "vzory" || d.v === "tahak") { st.view = d.v; history.replaceState(null, "", "#" + d.v); render(); return; }
+    var i = PROBS.findIndex(function (p) { return p.id === d.id; });
+    if (i < 0) return;
+    var p = PROBS[i], changed = st.lastId !== p.id;
+    st.view = "ex"; st.pi = i; st.lastId = p.id; st.openCh = p.ch; st.patFocus = null;
+    st.mode = d.mode === "practice" ? "practice" : "learn";
+    st.ns = isFinite(d.ns) ? Math.max(0, d.ns | 0) : 0;
+    st.pf = d.pf == null || !isFinite(d.pf) ? null : Math.max(0, d.pf | 0);
+    st.allhl = d.allhl === true; st.clean = d.clean === true;
+    history.replaceState(null, "", "#" + p.m.id);
+    render();
+    if (changed) { window.scrollTo(0, 0); scrollListToCurrent(); }
+  } finally { RT.applying = false; }
+}
+/* everything below arrives from other people's browsers: validate before use */
+function pct(v) { return typeof v === "number" && v >= 0 && v <= 100 ? v : null; }
+function mergePins(list) {
+  if (!Array.isArray(list)) return;
+  list.slice(0, 300).forEach(function (q) {
+    if (!q || typeof q.k !== "string" || q.k.length > 24 || typeof q.id !== "string") return;
+    if (!PROBS.some(function (p) { return p.id === q.id; })) return;
+    var x = pct(q.x), y = pct(q.y);
+    if (x == null || y == null) return;
+    RT.pins[q.k] = { k: q.k, id: q.id, x: x, y: y, t: typeof q.t === "string" ? q.t.slice(0, 200) : "", by: String(q.by || "").slice(0, 40) };
+  });
+}
+function drawShared() {
+  var pap = document.querySelector("#main .paper"), old = pap && pap.querySelector(".shared");
+  if (old) old.remove();
+  if (!RT || !pap || st.view !== "ex") return;
+  var id = PROBS[st.pi].id, lay = document.createElement("div");
+  lay.className = "shared";
+  Object.keys(RT.pins).forEach(function (k) {
+    var q = RT.pins[k];
+    if (q.id !== id) return;
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "pin" + (q.t ? "" : " dot"); b.dataset.pin = k;
+    b.style.left = q.x + "%"; b.style.top = q.y + "%"; b.style.setProperty("--c", peerCol(q.by));
+    b.textContent = q.t; b.title = "Klikni pro smazání";
+    lay.appendChild(b);
+  });
+  Object.keys(RT.cur).forEach(function (pid) {
+    var c = RT.cur[pid];
+    if (c.id !== id || Date.now() - c.at > 4000) return;
+    var i = document.createElement("i");
+    i.className = "pcur"; i.style.left = c.x + "%"; i.style.top = c.y + "%"; i.style.setProperty("--c", peerCol(pid));
+    lay.appendChild(i);
+  });
+  pap.appendChild(lay);
+}
+function rtJoin(code, creator) {
+  code = String(code || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16);
+  if (code.length < 4) { rtMsg("Kód má aspoň 4 znaky."); return; }
+  rtMsg("Připojuji…");
+  import(TRYSTERO).then(function (T) {
+    if (RT) RT.room.leave();
+    var room = T.joinRoom({ appId: "nai-sbirka-machmar-claude", password: code }, code);
+    RT = { room: room, self: T.selfId, code: code, peers: {}, pins: {}, cur: {}, a: {}, follow: true, need: !creator, lastKey: null, applying: false };
+    ["view", "ptr", "pin", "unpin", "hi"].forEach(function (n) { RT.a[n] = room.makeAction(n); });
+    room.onPeerJoin = function (pid) {
+      RT.peers[pid] = true;
+      RT.a.hi.send({ need: RT.need, pins: Object.keys(RT.pins).map(function (k) { return RT.pins[k]; }) }, { target: pid });
+      rtUi();
+    };
+    room.onPeerLeave = function (pid) { delete RT.peers[pid]; delete RT.cur[pid]; drawShared(); rtUi(); };
+    /* a newcomer asks for the current view once; old members never follow the newcomer's start page */
+    RT.a.hi.onMessage = function (d, m) {
+      if (!d || typeof d !== "object") return;
+      mergePins(d.pins);
+      if (d.need === true && !RT.need) RT.a.view.send(viewNow(), { target: m.peerId });
+      drawShared();
+    };
+    RT.a.view.onMessage = function (d) { applyView(d); };
+    RT.a.ptr.onMessage = function (d, m) {
+      if (!d || typeof d.id !== "string") return;
+      var x = pct(d.x), y = pct(d.y);
+      if (x == null || y == null) delete RT.cur[m.peerId]; else RT.cur[m.peerId] = { id: d.id, x: x, y: y, at: Date.now() };
+      drawShared();
+    };
+    RT.a.pin.onMessage = function (d, m) { if (d && typeof d === "object") { d.by = m.peerId; mergePins([d]); drawShared(); } };
+    RT.a.unpin.onMessage = function (k) { if (typeof k === "string" && RT.pins[k]) { delete RT.pins[k]; drawShared(); } };
+    setUrlRoom(code);
+    RT.lastKey = JSON.stringify(viewNow());
+    rtUi(); drawShared();
+  }).catch(function () { rtMsg("Spojení se nepodařilo spustit (jste online?)."); });
+}
+function rtLeave() {
+  if (!RT) return;
+  RT.room.leave(); RT = null;
+  setUrlRoom(null); drawShared(); rtUi();
+}
+var ptrAt = 0, ptrIn = false;
+document.addEventListener("pointermove", function (e) {
+  if (!RT || st.view !== "ex") return;
+  var pap = e.target.closest && e.target.closest("#main .paper");
+  if (!pap) { if (ptrIn) { ptrIn = false; RT.a.ptr.send({ id: PROBS[st.pi].id, x: null }); } return; }
+  var now = Date.now();
+  if (now - ptrAt < 40) return; /* ~25 updates/s is plenty for a pointer */
+  ptrAt = now; ptrIn = true;
+  var r = pap.getBoundingClientRect();
+  RT.a.ptr.send({ id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2) });
+});
+document.addEventListener("dblclick", function (e) {
+  if (!RT || st.view !== "ex") return;
+  var pap = e.target.closest && e.target.closest("#main .paper");
+  if (!pap || e.target.closest(".pin")) return;
+  var r = pap.getBoundingClientRect();
+  var t = window.prompt("Poznámka k tomuto místu (uvidí ji všichni v místnosti, může být prázdná):", "");
+  if (t === null) return;
+  var q = { k: newCode() + newCode(), id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2), t: t.trim().slice(0, 200) };
+  q.by = RT.self; mergePins([q]); RT.a.pin.send(q); drawShared();
+});
+setInterval(function () { if (RT && Object.keys(RT.cur).length) drawShared(); }, 1000); /* drop idle pointers */
 
 /* ---------- formula drawer: click the handle to slide it, drag the handle to move it
    up/down or (when open) push it back toward the edge, drag the bottom grip to resize ---------- */
@@ -610,6 +781,9 @@ $("#dbody").innerHTML = (window.VZORCE || []).map(function (g) {
 load();
 applyTheme();
 drApply();
+rtUi();
+var rtq = new URLSearchParams(location.search).get("room");
+if (rtq) rtJoin(rtq, false);
 if (window.innerWidth > 760) { var ft = $("#foot"); if (ft) ft.open = true; }
 if (!routeFromHash()) {
   try { history.replaceState(null, "", "#" + PROBS[st.pi].m.id); } catch (e) {}
