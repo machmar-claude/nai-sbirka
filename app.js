@@ -578,6 +578,8 @@ window.addEventListener("hashchange", routeFromHash);
    handshake). The library is loaded only when someone creates or joins a room, so solo use never touches the network. ---------- */
 var RT = null;
 var TRYSTERO = "https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm";
+/* TURN relay for networks that block direct connections (e.g. school Wi-Fi). Empty = direct connections only. */
+var TURN = [];
 var PCOL = ["#e5484d", "#1e88e5", "#2e9e5b", "#8e44ad", "#ef6c00", "#00979c", "#d6409f"];
 function peerCol(id) { var h = 0; id = String(id); for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return PCOL[Math.abs(h) % PCOL.length]; }
 function newCode() { var a = "abcdefghjkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(6)), s = ""; for (var i = 0; i < 6; i++) s += a[r[i] % a.length]; return s; }
@@ -587,6 +589,12 @@ function rtUi() {
   var b = $("#rtbody"), n = RT ? Object.keys(RT.peers).length : 0;
   $("#rtbtn").classList.toggle("on", !!RT);
   $("#rtn").textContent = RT ? String(n + 1) : "";
+  var chip = $("#rtchip");
+  chip.hidden = !RT;
+  if (RT) {
+    chip.classList.toggle("warn", !!RT.err && !n);
+    chip.textContent = "Místnost " + RT.code + " · " + (n ? (n + 1) + (n + 1 < 5 ? " lidé" : " lidí") : RT.err ? "spojení selhalo" : "jen vy");
+  }
   if (!RT) {
     b.innerHTML = "<h2>Spolu</h2><p>Otevřete sbírku na více počítačích a propojte je kódem. Uvidíte, kde je ten druhý, jeho ukazatel ve schématu a společné poznámky. Spojení jde přímo mezi prohlížeči, nic se nikam neukládá.</p>" +
       '<button class="btn primary" type="button" data-rt="create">Vytvořit místnost</button>' +
@@ -595,6 +603,7 @@ function rtUi() {
   }
   var url = new URL(location.href); url.hash = "";
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")." : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
+    (RT.err ? '<p class="msg err">' + RT.err + "</p>" : "") +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
     "<p>Ukazatel: najeď myší na schéma. Poznámka: dvojklik na schéma. Smazání: klik na poznámku.</p>" +
@@ -672,11 +681,17 @@ function rtJoin(code, creator) {
   rtMsg("Připojuji…");
   import(TRYSTERO).then(function (T) {
     if (RT) RT.room.leave();
-    var room = T.joinRoom({ appId: "nai-sbirka-machmar-claude", password: code }, code);
+    var room = T.joinRoom({ appId: "nai-sbirka-machmar-claude", password: code, turnConfig: TURN.length ? TURN : undefined }, code, {
+      onJoinError: function () {
+        if (!RT) return;
+        RT.err = "S někým v místnosti se nepodařilo spojit: síť nepovolila přímé spojení mezi počítači. Zkuste jinou síť, třeba hotspot z telefonu, a pak obnovte stránku na všech počítačích.";
+        rtUi();
+      }
+    });
     RT = { room: room, self: T.selfId, code: code, peers: {}, pins: {}, cur: {}, a: {}, follow: true, need: !creator, lastKey: null, applying: false };
     ["view", "ptr", "pin", "unpin", "hi"].forEach(function (n) { RT.a[n] = room.makeAction(n); });
     room.onPeerJoin = function (pid) {
-      RT.peers[pid] = true;
+      RT.peers[pid] = true; RT.err = null;
       RT.a.hi.send({ need: RT.need, pins: Object.keys(RT.pins).map(function (k) { return RT.pins[k]; }) }, { target: pid });
       rtUi();
     };
