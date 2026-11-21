@@ -319,3 +319,16 @@ main { padding-bottom: 56px; }
 .rtchip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #2e9e5b; }
 .rtchip[hidden] { display: none; }
 @media print { .rtchip { display: none; } }
+
+/* ---------- drawing on the schematic ---------- */
+.ink path { fill: none; stroke-width: 3px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.paper.inking { touch-action: none; cursor: crosshair; }
+.paper.inking.erase { cursor: cell; }
+.paper img { user-select: none; -webkit-user-drag: none; }
+.ink-bar { position: absolute; top: 0; right: 0; z-index: 2; display: flex; gap: 4px; padding: 8px 8px 22px 36px; line-height: 0; opacity: 0; transition: opacity .18s; }
+.ink-bar:hover, .ink-bar:focus-within, .paper.inking .ink-bar { opacity: 1; }
+.ink-bar button { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--sheet); color: var(--ink); cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.ink-bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--sheet); }
+.ink-bar svg { width: 18px; height: 18px; position: static; }
+.ink-bar i { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 2px var(--sheet), 0 0 0 3px var(--rule); }
+@media print { .ink-bar { display: none; } }

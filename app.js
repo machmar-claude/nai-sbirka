@@ -325,7 +325,7 @@ function renderExample() {
   }
   var solo = !p.nai;
   return '<div class="sheet">' + headHtml(p) + taskHtml(p) +
-    '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '">' + o.svg + "</div>" +
+    '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool && !st.clean ? " inking " + st.tool : "") + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + inkBar() + "</div>" +
     '<figcaption class="legend">' + lg + "</figcaption>" +
     (p.nai ? '<div class="opts">' +
       (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
@@ -373,6 +373,7 @@ function render(focusSel) {
   updateReport();
   save();
   rtAfterRender();
+  if (!RT) drawShared();
 }
 /* prefill the GitHub issue with where the reader is */
 function updateReport() {
@@ -487,6 +488,11 @@ document.addEventListener("click", function (ev) {
     else if (d.rt === "copy") { var l = $("#rtlink"); (navigator.clipboard ? navigator.clipboard.writeText(l.value) : Promise.reject()).then(function () { rtMsg("Odkaz zkopírován."); }, function () { l.select(); rtMsg("Zkopíruj odkaz ručně (Ctrl+C)."); }); }
     return;
   }
+  if (d.ink) {
+    if (d.ink === "color") { st.inkC = INKC[(INKC.indexOf(st.inkC) + 1) % INKC.length]; if (!st.tool) st.tool = "pen"; }
+    else st.tool = st.tool === d.ink ? null : d.ink;
+    render(); return;
+  }
   if (d.pin) {
     var q = RT && RT.pins[d.pin];
     if (q && window.confirm(q.t ? "Smazat poznámku „" + q.t + "“ pro všechny?" : "Smazat tuto značku pro všechny?")) { delete RT.pins[d.pin]; rtSend("unpin", d.pin); drawShared(); }
@@ -574,6 +580,89 @@ document.addEventListener("keydown", function (ev) {
 });
 window.addEventListener("hashchange", routeFromHash);
 
+/* ---------- drawing on the schematic: hover the top-right corner for pen / eraser / colour.
+   Strokes are in % of the schematic, so they line up on every screen. Kept for this visit only (not saved). ---------- */
+var INK = {};
+var INKC = ["#e5484d", "#1e88e5", "#2e9e5b", "#ef6c00", "#8e44ad", "#15191e"];
+st.tool = null; st.inkC = INKC[0];
+function inkBar() {
+  if (st.clean) return "";
+  return '<div class="ink-bar"><button type="button" data-ink="pen" title="Pero" aria-label="Pero" aria-pressed="' + (st.tool === "pen") + '">' +
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>' +
+    '<button type="button" data-ink="erase" title="Guma: smaže celou čáru, které se dotkne" aria-label="Guma" aria-pressed="' + (st.tool === "erase") + '">' +
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19l-5-5 9.5-9.5a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19zM9 19h11M7.5 10.5l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></button>' +
+    '<button type="button" data-ink="color" title="Barva pera" aria-label="Barva pera"><i style="background:' + st.inkC + '"></i></button></div>';
+}
+function inkPath(pts) { return "M" + pts.map(function (q) { return q[0] + " " + q[1]; }).join(" L"); }
+function inkSvg(list) {
+  return '<svg class="ink" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + list.map(function (q) {
+    return '<path d="' + inkPath(q.p) + '" stroke="' + q.c + '"/>';
+  }).join("") + "</svg>";
+}
+function inkList() { return Object.keys(INK).map(function (k) { return INK[k]; }).slice(-40); }
+/* strokes can come from other people's browsers: validate before use */
+function mergeInk(list) {
+  if (!Array.isArray(list)) return;
+  list.slice(0, 200).forEach(function (q) {
+    if (!q || typeof q.k !== "string" || q.k.length > 24 || INKC.indexOf(q.c) < 0 || !Array.isArray(q.p) || !q.p.length || q.p.length > 2000) return;
+    if (!PROBS.some(function (p) { return p.id === q.id; })) return;
+    var pts = q.p.filter(function (a) { return Array.isArray(a) && pct(a[0]) != null && pct(a[1]) != null; }).map(function (a) { return [a[0], a[1]]; });
+    if (pts.length === q.p.length) INK[q.k] = { k: q.k, id: q.id, c: q.c, p: pts };
+  });
+}
+function inkPt(pap, e) {
+  var r = pap.getBoundingClientRect();
+  return [+Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)).toFixed(2), +Math.max(0, Math.min(100, (e.clientY - r.top) / r.height * 100)).toFixed(2)];
+}
+/* eraser: remove every stroke of this problem that passes within 9 px of the pointer */
+function inkErase(pap, e) {
+  var r = pap.getBoundingClientRect(), sx = r.width / 100, sy = r.height / 100, x = e.clientX - r.left, y = e.clientY - r.top, id = PROBS[st.pi].id, hit = false;
+  Object.keys(INK).forEach(function (k) {
+    var q = INK[k];
+    if (q.id !== id) return;
+    for (var i = 0; i < q.p.length; i++) {
+      var ax = q.p[i][0] * sx, ay = q.p[i][1] * sy, b = q.p[Math.min(i + 1, q.p.length - 1)], bx = b[0] * sx, by = b[1] * sy;
+      var dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L)) : 0;
+      if (Math.hypot(x - ax - t * dx, y - ay - t * dy) < 9) { delete INK[k]; hit = true; if (RT) rtSend("erase", k); return; }
+    }
+  });
+  if (hit) drawShared();
+}
+var inkNow = null;
+document.addEventListener("pointerdown", function (e) {
+  if (!st.tool || st.clean || st.view !== "ex" || e.button > 0) return;
+  var pap = e.target.closest && e.target.closest("#main .paper");
+  if (!pap || e.target.closest(".ink-bar, .pin")) return;
+  e.preventDefault();
+  try { pap.setPointerCapture(e.pointerId); } catch (x) {} /* keeps the line going when the pointer leaves the schematic */
+  if (st.tool === "erase") { inkNow = { erase: true, pap: pap }; inkErase(pap, e); return; }
+  var live = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  live.setAttribute("class", "ink ink-live"); live.setAttribute("viewBox", "0 0 100 100"); live.setAttribute("preserveAspectRatio", "none");
+  live.innerHTML = '<path stroke="' + st.inkC + '"/>';
+  pap.appendChild(live);
+  inkNow = { pap: pap, live: live, q: { k: newCode() + newCode(), id: PROBS[st.pi].id, c: st.inkC, p: [inkPt(pap, e)] } };
+  live.firstChild.setAttribute("d", inkPath(inkNow.q.p));
+});
+document.addEventListener("pointermove", function (e) {
+  if (!inkNow) return;
+  if (inkNow.erase) { inkErase(inkNow.pap, e); return; }
+  var pt = inkPt(inkNow.pap, e), last = inkNow.q.p[inkNow.q.p.length - 1];
+  if (Math.abs(pt[0] - last[0]) + Math.abs(pt[1] - last[1]) < 0.3) return; /* skip tiny moves: fewer points to send */
+  inkNow.q.p.push(pt);
+  inkNow.live.firstChild.setAttribute("d", inkPath(inkNow.q.p));
+});
+function inkEnd() {
+  if (!inkNow) return;
+  var n = inkNow; inkNow = null;
+  if (n.erase) return;
+  n.live.remove();
+  INK[n.q.k] = n.q;
+  if (RT) rtSend("draw", n.q); /* the whole line, once it is finished */
+  drawShared();
+}
+document.addEventListener("pointerup", inkEnd);
+document.addEventListener("pointercancel", inkEnd);
+
 /* ---------- Spolu: optional live room. Peers connect directly over WebRTC (Trystero; public Nostr relays carry the
    handshake). When a network blocks direct connections, messages to that person go through the same Nostr relays instead,
    encrypted with a key derived from the room code. The library is loaded only when someone creates or joins a room,
@@ -609,7 +698,8 @@ function rtUi() {
 }
 function viewNow() {
   var p = PROBS[st.pi];
-  return st.view !== "ex" ? { v: st.view } : { v: "ex", id: p.id, mode: curMode(p), ns: st.ns, pf: st.pf, allhl: !!st.allhl, clean: !!st.clean };
+  return st.view !== "ex" ? { v: st.view } : { v: "ex", id: p.id, mode: curMode(p), ns: st.ns, pf: st.pf, allhl: !!st.allhl, clean: !!st.clean,
+           done: p.m.steps.map(function (_, i) { return i; }).filter(function (i) { return solved(p, i); }) };
 }
 /* called from render(): broadcast my view when it changed, and redraw the shared layer */
 function rtAfterRender() {
@@ -632,6 +722,13 @@ function applyView(d) {
     st.ns = isFinite(d.ns) ? Math.max(0, d.ns | 0) : 0;
     st.pf = d.pf == null || !isFinite(d.pf) ? null : Math.max(0, d.pf | 0);
     st.allhl = d.allhl === true; st.clean = d.clean === true;
+    /* steps someone else solved: show them here as revealed, with the correct value filled in */
+    if (Array.isArray(d.done)) d.done.slice(0, 50).forEach(function (k) {
+      var stp = p.m.steps[k], s = pg(p);
+      if (!stp || solved(p, k)) return;
+      s.rev[k] = true;
+      if (stp.ans != null) { s.val[k] = String(stp.ans).replace(".", ","); s.fb[k] = "ok"; }
+    });
     history.replaceState(null, "", "#" + p.m.id);
     render();
     if (changed) { window.scrollTo(0, 0); scrollListToCurrent(); }
@@ -652,10 +749,11 @@ function mergePins(list) {
 function drawShared() {
   var pap = document.querySelector("#main .paper"), old = pap && pap.querySelector(".shared");
   if (old) old.remove();
-  if (!RT || !pap || st.view !== "ex") return;
+  if (!pap || st.view !== "ex") return;
   var id = PROBS[st.pi].id, lay = document.createElement("div");
   lay.className = "shared";
-  Object.keys(RT.pins).forEach(function (k) {
+  if (!st.clean) lay.innerHTML = inkSvg(Object.keys(INK).map(function (k) { return INK[k]; }).filter(function (q) { return q.id === id; }));
+  if (RT && !st.clean) Object.keys(RT.pins).forEach(function (k) {
     var q = RT.pins[k];
     if (q.id !== id) return;
     var b = document.createElement("button");
@@ -664,7 +762,7 @@ function drawShared() {
     b.textContent = q.t; b.title = "Klikni pro smazání";
     lay.appendChild(b);
   });
-  Object.keys(RT.cur).forEach(function (pid) {
+  if (RT) Object.keys(RT.cur).forEach(function (pid) {
     var c = RT.cur[pid];
     if (c.id !== id || Date.now() - c.at > 4000) return;
     var i = document.createElement("i");
@@ -701,9 +799,9 @@ function rtRecv(msg, pid) {
   if (pid) m.p2p = pid; else m.seen = Date.now();
   var d = msg.d;
   if (msg.t === "bye") { delete RT.members[msg.f]; delete RT.cur[msg.f]; isNew = false; drawShared(); }
-  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList() }, msg.f);
+  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList() }, msg.f);
   /* a newcomer asks for the current view once; whoever has been in the room longer answers, never the newcomer */
-  if (msg.t === "hi" && d && typeof d === "object") { mergePins(d.pins); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
+  if (msg.t === "hi" && d && typeof d === "object") { mergePins(d.pins); mergeInk(d.ink); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
   if (msg.t === "view") applyView(d);
   if (msg.t === "ptr" && d && typeof d.id === "string") {
     var x = pct(d.x), y = pct(d.y);
@@ -712,6 +810,8 @@ function rtRecv(msg, pid) {
   }
   if (msg.t === "pin" && d && typeof d === "object") { d.by = msg.f; mergePins([d]); drawShared(); }
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
+  if (msg.t === "draw") { mergeInk([d]); drawShared(); }
+  if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
 /* ---- relay path: Trystero's own Nostr relay sockets, ephemeral events, AES-GCM with a key from the room code ---- */
@@ -822,7 +922,7 @@ document.addEventListener("pointermove", function (e) {
 document.addEventListener("dblclick", function (e) {
   if (!RT || st.view !== "ex") return;
   var pap = e.target.closest && e.target.closest("#main .paper");
-  if (!pap || e.target.closest(".pin")) return;
+  if (!pap || st.tool || e.target.closest(".pin, .ink-bar")) return;
   var r = pap.getBoundingClientRect();
   var t = window.prompt("Poznámka k tomuto místu (uvidí ji všichni v místnosti, může být prázdná):", "");
   if (t === null) return;
