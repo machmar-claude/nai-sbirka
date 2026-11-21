@@ -489,7 +489,7 @@ document.addEventListener("click", function (ev) {
   }
   if (d.pin) {
     var q = RT && RT.pins[d.pin];
-    if (q && window.confirm(q.t ? "Smazat poznámku „" + q.t + "“ pro všechny?" : "Smazat tuto značku pro všechny?")) { delete RT.pins[d.pin]; RT.a.unpin.send(d.pin); drawShared(); }
+    if (q && window.confirm(q.t ? "Smazat poznámku „" + q.t + "“ pro všechny?" : "Smazat tuto značku pro všechny?")) { delete RT.pins[d.pin]; rtSend("unpin", d.pin); drawShared(); }
     return;
   }
   if (d.sys) {
@@ -574,26 +574,25 @@ document.addEventListener("keydown", function (ev) {
 });
 window.addEventListener("hashchange", routeFromHash);
 
-/* ---------- Spolu: optional live room. Peers connect directly over WebRTC (Trystero, public Nostr relays only for the
-   handshake). The library is loaded only when someone creates or joins a room, so solo use never touches the network. ---------- */
+/* ---------- Spolu: optional live room. Peers connect directly over WebRTC (Trystero; public Nostr relays carry the
+   handshake). When a network blocks direct connections, messages to that person go through the same Nostr relays instead,
+   encrypted with a key derived from the room code. The library is loaded only when someone creates or joins a room,
+   so solo use never touches the network. ---------- */
 var RT = null;
 var TRYSTERO = "https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm";
-/* TURN relay for networks that block direct connections (e.g. school Wi-Fi). Empty = direct connections only. */
-var TURN = [];
 var PCOL = ["#e5484d", "#1e88e5", "#2e9e5b", "#8e44ad", "#ef6c00", "#00979c", "#d6409f"];
 function peerCol(id) { var h = 0; id = String(id); for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return PCOL[Math.abs(h) % PCOL.length]; }
 function newCode() { var a = "abcdefghjkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(6)), s = ""; for (var i = 0; i < 6; i++) s += a[r[i] % a.length]; return s; }
 function setUrlRoom(code) { var u = new URL(location.href); if (code) u.searchParams.set("room", code); else u.searchParams.delete("room"); history.replaceState(null, "", u.href); }
 function rtMsg(t) { var m = $("#rtmsg"); if (m) m.textContent = t; }
 function rtUi() {
-  var b = $("#rtbody"), n = RT ? Object.keys(RT.peers).length : 0;
+  var b = $("#rtbody"), c = RT ? rtCount() : { n: 0, r: 0 }, n = c.n;
   $("#rtbtn").classList.toggle("on", !!RT);
   $("#rtn").textContent = RT ? String(n + 1) : "";
   var chip = $("#rtchip");
   chip.hidden = !RT;
   if (RT) {
-    chip.classList.toggle("warn", !!RT.err && !n);
-    chip.textContent = "Místnost " + RT.code + " · " + (n ? (n + 1) + (n + 1 < 5 ? " lidé" : " lidí") : RT.err ? "spojení selhalo" : "jen vy");
+    chip.textContent = "Místnost " + RT.code + " · " + (n ? (n + 1) + (n + 1 < 5 ? " lidé" : " lidí") : "jen vy");
   }
   if (!RT) {
     b.innerHTML = "<h2>Spolu</h2><p>Otevřete sbírku na více počítačích a propojte je kódem. Uvidíte, kde je ten druhý, jeho ukazatel ve schématu a společné poznámky. Spojení jde přímo mezi prohlížeči, nic se nikam neukládá.</p>" +
@@ -602,8 +601,7 @@ function rtUi() {
     return;
   }
   var url = new URL(location.href); url.hash = "";
-  b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")." : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
-    (RT.err ? '<p class="msg err">' + RT.err + "</p>" : "") +
+  b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
     "<p>Ukazatel: najeď myší na schéma. Poznámka: dvojklik na schéma. Smazání: klik na poznámku.</p>" +
@@ -617,7 +615,7 @@ function viewNow() {
 function rtAfterRender() {
   if (!RT) return;
   var v = viewNow(), k = JSON.stringify(v);
-  if (k !== RT.lastKey) { RT.lastKey = k; if (!RT.applying) RT.a.view.send(v); }
+  if (k !== RT.lastKey) { RT.lastKey = k; if (!RT.applying) rtSend("view", v); }
   drawShared();
 }
 function applyView(d) {
@@ -675,43 +673,127 @@ function drawShared() {
   });
   pap.appendChild(lay);
 }
+function rtAlive(m) { return !!m.p2p || Date.now() - m.seen < 30000; }
+/* n = other people in the room, r = how many of them are reachable only through the relays */
+function rtCount() {
+  var n = 0, r = 0;
+  Object.keys(RT.members).forEach(function (k) { var m = RT.members[k]; if (rtAlive(m)) { n++; if (!m.p2p) r++; } });
+  return { n: n, r: r };
+}
+function pinList() { return Object.keys(RT.pins).map(function (k) { return RT.pins[k]; }).slice(-60); }
+/* one envelope for both paths: {f: sender id, s: sequence no., t: type, d: data, to: recipient (optional)} */
+function rtSend(t, d, to) {
+  if (!RT) return;
+  var msg = { f: RT.me, s: ++RT.seq, t: t, d: d };
+  if (to) msg.to = to;
+  var tp = to && RT.members[to] && RT.members[to].p2p;
+  if (tp) RT.a.m.send(msg, { target: tp }); else if (!to) RT.a.m.send(msg);
+  if (t === "here" || t === "bye" || (to ? !tp : rtCount().r)) relayPub(msg);
+}
+function rtRecv(msg, pid) {
+  if (!RT || !msg || typeof msg !== "object" || typeof msg.f !== "string" || msg.f.length > 24 || msg.f === RT.me || typeof msg.t !== "string") return;
+  if (msg.to && msg.to !== RT.me) return;
+  var key = msg.f + ":" + msg.s;
+  if (RT.dup[key]) return; /* the same message can arrive both directly and through a relay */
+  RT.dup[key] = 1; RT.dupQ.push(key); if (RT.dupQ.length > 600) delete RT.dup[RT.dupQ.shift()];
+  var before = JSON.stringify(rtCount()), m = RT.members[msg.f], isNew = !m || !rtAlive(m);
+  if (!m) m = RT.members[msg.f] = { p2p: null, seen: 0 };
+  if (pid) m.p2p = pid; else m.seen = Date.now();
+  var d = msg.d;
+  if (msg.t === "bye") { delete RT.members[msg.f]; delete RT.cur[msg.f]; isNew = false; drawShared(); }
+  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList() }, msg.f);
+  /* a newcomer asks for the current view once; whoever has been in the room longer answers, never the newcomer */
+  if (msg.t === "hi" && d && typeof d === "object") { mergePins(d.pins); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
+  if (msg.t === "view") applyView(d);
+  if (msg.t === "ptr" && d && typeof d.id === "string") {
+    var x = pct(d.x), y = pct(d.y);
+    if (x == null || y == null) delete RT.cur[msg.f]; else RT.cur[msg.f] = { id: d.id, x: x, y: y, at: Date.now() };
+    drawShared();
+  }
+  if (msg.t === "pin" && d && typeof d === "object") { d.by = msg.f; mergePins([d]); drawShared(); }
+  if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
+  if (JSON.stringify(rtCount()) !== before) rtUi();
+}
+/* ---- relay path: Trystero's own Nostr relay sockets, ephemeral events, AES-GCM with a key from the room code ---- */
+function b64(u) { var t = ""; for (var i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return btoa(t); }
+function unb64(t) { var b = atob(t), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+function relaySetup(T, code) {
+  var te = new TextEncoder();
+  return Promise.all([crypto.subtle.digest("SHA-256", te.encode("nai-sbirka/topic/" + code)), crypto.subtle.digest("SHA-256", te.encode("nai-sbirka/key/" + code))]).then(function (h) {
+    return crypto.subtle.importKey("raw", h[1], "AES-GCM", false, ["encrypt", "decrypt"]).then(function (key) {
+      var topic = Array.from(new Uint8Array(h[0])).map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
+      return { T: T, key: key, topic: topic, sub: "nai" + newCode() + newCode(), socks: new WeakSet(), ptrNext: null, ptrTimer: null };
+    });
+  });
+}
+function relaySocks(R) {
+  var out = [];
+  if (!R) return out;
+  var all = R.T.getRelaySockets() || {};
+  Object.keys(all).forEach(function (u) {
+    var so = all[u];
+    if (!so || so.readyState !== 1) return;
+    if (!R.socks.has(so)) { R.socks.add(so); so.addEventListener("message", relayIn); so.send(R.T.subscribe(R.sub, R.topic)); }
+    out.push(so);
+  });
+  return out;
+}
+function relayIn(e) {
+  var R = RT && RT.relay, a;
+  if (!R) return;
+  try { a = JSON.parse(e.data); } catch (x) { return; }
+  if (!Array.isArray(a) || a[0] !== "EVENT" || a[1] !== R.sub || !a[2] || typeof a[2].content !== "string") return;
+  var parts = a[2].content.split(".");
+  if (parts.length !== 2) return;
+  /* only someone with the room code can produce a message that decrypts */
+  try {
+    crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(parts[0]) }, R.key, unb64(parts[1])).then(function (pt) {
+      var msg; try { msg = JSON.parse(new TextDecoder().decode(pt)); } catch (x) { return; }
+      rtRecv(msg, null);
+    }, function () {});
+  } catch (x) {}
+}
+function relayPub(msg) {
+  var R = RT && RT.relay;
+  if (!R) return;
+  if (msg.t === "ptr") { /* relays rate-limit, so at most 4 pointer updates per second, always the latest */
+    R.ptrNext = msg;
+    if (!R.ptrTimer) R.ptrTimer = setTimeout(function () { R.ptrTimer = null; var m = R.ptrNext; R.ptrNext = null; if (m) relayRaw(R, m); }, 250);
+    return;
+  }
+  relayRaw(R, msg);
+}
+function relayRaw(R, msg) {
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, R.key, new TextEncoder().encode(JSON.stringify(msg))).then(function (ct) {
+    return R.T.createEvent(R.topic, b64(iv) + "." + b64(new Uint8Array(ct)));
+  }).then(function (ev) { relaySocks(R).forEach(function (so) { try { so.send(ev); } catch (x) {} }); }, function () {});
+}
 function rtJoin(code, creator) {
   code = String(code || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16);
   if (code.length < 4) { rtMsg("Kód má aspoň 4 znaky."); return; }
   rtMsg("Připojuji…");
   import(TRYSTERO).then(function (T) {
-    if (RT) RT.room.leave();
-    var room = T.joinRoom({ appId: "nai-sbirka-machmar-claude", password: code, turnConfig: TURN.length ? TURN : undefined }, code, {
-      onJoinError: function () {
-        if (!RT) return;
-        RT.err = "S někým v místnosti se nepodařilo spojit: síť nepovolila přímé spojení mezi počítači. Zkuste jinou síť, třeba hotspot z telefonu, a pak obnovte stránku na všech počítačích.";
-        rtUi();
-      }
-    });
-    RT = { room: room, self: T.selfId, code: code, peers: {}, pins: {}, cur: {}, a: {}, follow: true, need: !creator, lastKey: null, applying: false };
-    ["view", "ptr", "pin", "unpin", "hi"].forEach(function (n) { RT.a[n] = room.makeAction(n); });
-    room.onPeerJoin = function (pid) {
-      RT.peers[pid] = true; RT.err = null;
-      RT.a.hi.send({ need: RT.need, pins: Object.keys(RT.pins).map(function (k) { return RT.pins[k]; }) }, { target: pid });
-      rtUi();
+    if (RT) rtLeave();
+    var room = T.joinRoom({ appId: "nai-sbirka-machmar-claude", password: code }, code);
+    var me = RT = { room: room, me: newCode() + newCode(), seq: 0, code: code, since: Date.now(), members: {}, pins: {}, cur: {}, dup: {}, dupQ: [], a: {}, relay: null, timers: [],
+                    follow: true, need: !creator, lastKey: null, applying: false };
+    RT.a.m = room.makeAction("m");
+    RT.a.m.onMessage = function (msg, meta) { rtRecv(msg, meta && meta.peerId); };
+    room.onPeerJoin = function (pid) { RT.a.m.send({ f: RT.me, s: ++RT.seq, t: "here" }, { target: pid }); };
+    room.onPeerLeave = function (pid) {
+      Object.keys(RT.members).forEach(function (k) {
+        var m = RT.members[k];
+        if (m.p2p === pid) { m.p2p = null; if (!rtAlive(m)) { delete RT.members[k]; delete RT.cur[k]; } }
+      });
+      drawShared(); rtUi();
     };
-    room.onPeerLeave = function (pid) { delete RT.peers[pid]; delete RT.cur[pid]; drawShared(); rtUi(); };
-    /* a newcomer asks for the current view once; old members never follow the newcomer's start page */
-    RT.a.hi.onMessage = function (d, m) {
-      if (!d || typeof d !== "object") return;
-      mergePins(d.pins);
-      if (d.need === true && !RT.need) RT.a.view.send(viewNow(), { target: m.peerId });
-      drawShared();
-    };
-    RT.a.view.onMessage = function (d) { applyView(d); };
-    RT.a.ptr.onMessage = function (d, m) {
-      if (!d || typeof d.id !== "string") return;
-      var x = pct(d.x), y = pct(d.y);
-      if (x == null || y == null) delete RT.cur[m.peerId]; else RT.cur[m.peerId] = { id: d.id, x: x, y: y, at: Date.now() };
-      drawShared();
-    };
-    RT.a.pin.onMessage = function (d, m) { if (d && typeof d === "object") { d.by = m.peerId; mergePins([d]); drawShared(); } };
-    RT.a.unpin.onMessage = function (k) { if (typeof k === "string" && RT.pins[k]) { delete RT.pins[k]; drawShared(); } };
+    relaySetup(T, code).then(function (R) {
+      if (RT !== me) return;
+      RT.relay = R;
+      var beat = function () { if (RT === me) rtSend("here"); }; /* presence over the relays, so blocked peers are found too */
+      RT.timers.push(setTimeout(beat, 1500), setTimeout(beat, 4000), setInterval(beat, 10000));
+    }, function () {});
     setUrlRoom(code);
     RT.lastKey = JSON.stringify(viewNow());
     rtUi(); drawShared();
@@ -719,6 +801,10 @@ function rtJoin(code, creator) {
 }
 function rtLeave() {
   if (!RT) return;
+  rtSend("bye");
+  var R = RT.relay;
+  if (R) setTimeout(function () { relaySocks(R).forEach(function (so) { try { so.send(JSON.stringify(["CLOSE", R.sub])); } catch (x) {} }); }, 1000);
+  RT.timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
   RT.room.leave(); RT = null;
   setUrlRoom(null); drawShared(); rtUi();
 }
@@ -726,12 +812,12 @@ var ptrAt = 0, ptrIn = false;
 document.addEventListener("pointermove", function (e) {
   if (!RT || st.view !== "ex") return;
   var pap = e.target.closest && e.target.closest("#main .paper");
-  if (!pap) { if (ptrIn) { ptrIn = false; RT.a.ptr.send({ id: PROBS[st.pi].id, x: null }); } return; }
+  if (!pap) { if (ptrIn) { ptrIn = false; rtSend("ptr", { id: PROBS[st.pi].id, x: null }); } return; }
   var now = Date.now();
   if (now - ptrAt < 40) return; /* ~25 updates/s is plenty for a pointer */
   ptrAt = now; ptrIn = true;
   var r = pap.getBoundingClientRect();
-  RT.a.ptr.send({ id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2) });
+  rtSend("ptr", { id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2) });
 });
 document.addEventListener("dblclick", function (e) {
   if (!RT || st.view !== "ex") return;
@@ -741,9 +827,15 @@ document.addEventListener("dblclick", function (e) {
   var t = window.prompt("Poznámka k tomuto místu (uvidí ji všichni v místnosti, může být prázdná):", "");
   if (t === null) return;
   var q = { k: newCode() + newCode(), id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2), t: t.trim().slice(0, 200) };
-  q.by = RT.self; mergePins([q]); RT.a.pin.send(q); drawShared();
+  q.by = RT.me; mergePins([q]); rtSend("pin", q); drawShared();
 });
-setInterval(function () { if (RT && Object.keys(RT.cur).length) drawShared(); }, 1000); /* drop idle pointers */
+setInterval(function () { /* drop idle pointers and people who went quiet */
+  if (!RT) return;
+  var gone = false;
+  Object.keys(RT.members).forEach(function (k) { if (!rtAlive(RT.members[k])) { delete RT.members[k]; delete RT.cur[k]; gone = true; } });
+  if (gone) rtUi();
+  if (gone || Object.keys(RT.cur).length) drawShared();
+}, 1000);
 
 /* ---------- formula drawer: click the handle to slide it, drag the handle to move it
    up/down or (when open) push it back toward the edge, drag the bottom grip to resize ---------- */
