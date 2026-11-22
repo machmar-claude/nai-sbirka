@@ -894,7 +894,8 @@ document.addEventListener("pointerdown", function (e) {
     var n = Object.keys(zPts).length;
     if (n > 2 || (n === 1 && (st.tool || zcur().z <= 1))) return; /* one finger draws, or scrolls the page at 100 % */
   } else {
-    if (zG || st.tool || eraserTip(e) || e.button !== 0 || zcur().z <= 1) return;
+    /* middle button pans always, also with a tool on (drawing uses only the left button); left button only with no tool */
+    if (zG || eraserTip(e) || zcur().z <= 1 || !(e.button === 1 || (e.button === 0 && !st.tool))) return;
     zPts[e.pointerId] = { x: e.clientX, y: e.clientY };
   }
   if (inkNow && !inkNow.erase) inkNow.live.remove(); /* a second finger turns a stroke into a pinch */
@@ -915,6 +916,8 @@ function zEnd(e) {
   delete zPts[e.pointerId];
   if (zG) zStart(zG.pap); /* the remaining finger carries on panning */
 }
+/* no autoscroll circle from the middle button over a zoomed schematic */
+document.addEventListener("mousedown", function (e) { if (e.button === 1 && e.target.closest && e.target.closest("#main .paper.zoomed")) e.preventDefault(); });
 document.addEventListener("pointerup", zEnd);
 document.addEventListener("pointercancel", zEnd);
 document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-zreset]")) zSet({ z: 1, x: 0, y: 0 }); });
