@@ -966,14 +966,30 @@ var DRAWERS = [
   { s: DR, root: "#drawer", panel: "#dpanel", handle: "#dhandle", grip: "#dgrip" },
   { s: PD, root: "#pad", panel: "#ppanel", handle: "#phandle", grip: "#pgrip", onOpen: function () { padGrow(); if (RT) rtSend("pado"); } }
 ];
-function drApply(D) {
-  if (!D || !D.s) { DRAWERS.forEach(drApply); return; }
-  var d = $(D.root), p = $(D.panel), f = drFit(D.s);
+function drShow(D, f, hoff) {
+  var d = $(D.root), p = $(D.panel);
   d.classList.toggle("open", D.s.open);
-  d.style.top = f.top + "px"; d.style.setProperty("--dt", f.top + "px");
+  d.style.top = f.top + "px"; d.style.setProperty("--dt", f.top + "px"); d.style.setProperty("--hoff", hoff + "px");
   p.style.width = f.w + "px"; p.style.height = f.h + "px";
   p.inert = !D.s.open;
   $(D.handle).setAttribute("aria-expanded", String(D.s.open));
+}
+/* always lays out both drawers. The scratchpad is the lower layer, so its handle is kept clear of the formula drawer
+   (its handle, or its whole panel while open): slid along the pad's edge if possible, else to any free spot on screen,
+   else the pad is lifted above the formulas. Display only: the remembered positions stay as the user set them. */
+function drApply() {
+  var vh = window.innerHeight, ff = drFit(DR), pf = drFit(PD), off = 0, up = false, HH = 32;
+  var z0 = DR.open ? ff.top - 6 : ff.top + ff.h / 2 - HH - 6, z1 = DR.open ? ff.top + ff.h + 6 : ff.top + ff.h / 2 + HH + 6;
+  var c = pf.top + pf.h / 2;
+  if (c + HH > z0 && c - HH < z1) {
+    var want = c >= (z0 + z1) / 2 ? [z1 + HH, z0 - HH] : [z0 - HH, z1 + HH], pick = null;
+    want.forEach(function (v) { if (pick === null && v >= pf.top + HH && v <= pf.top + pf.h - HH) pick = v; });
+    want.forEach(function (v) { if (pick === null && v >= 8 + HH && v <= vh - 8 - HH) pick = v; });
+    if (pick === null) up = true; else off = pick - c;
+  }
+  $("#pad").classList.toggle("up", up);
+  drShow(DRAWERS[0], ff, 0);
+  drShow(DRAWERS[1], pf, off);
 }
 function drDrag(D, el, move) {
   var g = null;

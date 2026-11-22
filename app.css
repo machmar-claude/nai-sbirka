@@ -334,7 +334,11 @@ main { padding-bottom: 56px; }
 @media print { .ink-bar { display: none; } }
 
 /* ---------- scratchpad drawer (a layer below the formula sheet) ---------- */
+.drawer { pointer-events: none; } /* the container is wider/taller than what shows; only handle and panel take clicks */
+.drawer > .dhandle, .drawer > .dpanel { pointer-events: auto; }
 .drawer.pad { z-index: 39; }
+.drawer.pad.up { z-index: 41; } /* no free spot for its handle: lift it above the formulas */
+.drawer.pad .dhandle { transform: translateY(var(--hoff, 0px)); }
 .drawer.pad .dhandle span, .drawer.pad.open .dhandle span { transform: none; font-size: 17px; }
 .phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 5px; padding-bottom: 5px; }
 .ink-bar.ptools { position: static; opacity: 1; padding: 0; gap: 4px; text-transform: none; letter-spacing: 0; }
