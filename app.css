@@ -34,7 +34,7 @@ sub { font-size: .72em; line-height: 0; }
 
 
 
-.app { max-width: 1560px; margin: 0 auto; min-height: 100vh; background: var(--paper); display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+.app { min-height: 100vh; background: var(--paper); display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
 .app > aside { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--rule); background: var(--sheet); display: flex; flex-direction: column; }
 .side-top { position: sticky; top: 0; z-index: 3; background: var(--sheet); }
 .brand { padding: 14px 16px 10px; border-bottom: 1px solid var(--rule); display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
@@ -105,15 +105,22 @@ main { min-width: 0; background: var(--paper); color: var(--ink); font-family: v
 .tag { font-size: 12px; padding: 1px 9px; border-radius: 999px; background: var(--idea-soft); color: var(--idea); border: 1px solid transparent; cursor: pointer; }
 .tag:hover { border-color: var(--idea); }
 
-.grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+/* the steps column keeps its width on wide screens (page zoomed out); the schematic takes the rest */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) min(620px, 47%); gap: 20px; align-items: start; }
 .grid.solo { grid-template-columns: minmax(0, 1fr); }
 @container (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } .schem { position: static !important; } }
 .schem { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: flex; flex-direction: column; gap: 8px; margin: 0; }
 .grid.solo .schem { position: static; }
-.paper { position: relative; background: var(--schem-bg); border: 1px solid var(--rule); border-radius: var(--radius-sm); overflow: hidden; line-height: 0; }
+/* the paper is the visible window, as wide as fits (and no taller than the screen); .zoom inside it is the picture with
+   everything drawn on it, made --z times larger and shifted by --zx/--zy (fractions of its size) */
+.paper { position: relative; background: var(--schem-bg); border: 1px solid var(--rule); border-radius: var(--radius-sm); overflow: hidden; line-height: 0;
+  aspect-ratio: var(--ar); width: min(100%, calc((100dvh - 110px) * var(--ar))); margin: 0 auto; touch-action: pan-x pan-y; }
+.zoom { position: absolute; left: 0; top: 0; width: calc(var(--z, 1) * 100%); transform: translate(calc(var(--zx, 0) * -100%), calc(var(--zy, 0) * -100%)); }
 .paper img { width: 100%; height: auto; display: block; }
-.grid.solo .paper img { max-width: 560px; margin: 0 auto; }
 .paper svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.paper.zoomed { touch-action: none; cursor: grab; }
+.zbadge { position: absolute; left: 8px; bottom: 8px; z-index: 2; padding: 2px 9px; border: 1px solid var(--rule); border-radius: 999px; background: var(--sheet); color: var(--ink); font: 600 12px/1.4 var(--font-body); cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.paper:not(.zoomed) .zbadge { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); min-height: 20px; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
 .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
@@ -328,7 +335,7 @@ main { padding-bottom: 56px; }
 @media print { .rtchip { display: none; } }
 
 /* ---------- drawing on the schematic ---------- */
-.ink path { fill: none; stroke-width: 3px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.ink path { fill: none; stroke-width: calc(3px * var(--z, 1) / var(--w, 1)); stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .paper.inking { touch-action: none; cursor: crosshair; }
 .paper.inking.erase { cursor: cell; }
 .paper img { user-select: none; -webkit-user-drag: none; }

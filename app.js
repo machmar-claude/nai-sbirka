@@ -354,7 +354,8 @@ function renderExample() {
   }
   var solo = !p.nai;
   return '<div class="sheet">' + headHtml(p) + taskHtml(p) +
-    '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool ? " inking " + st.tool : "") + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + inkBar() + "</div>" +
+    '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool ? " inking " + st.tool : "") + (zcur().z > 1 ? " zoomed" : "") + '" style="--ar:' + p.w + "/" + p.h + '"><div class="zoom" style="' + zStyle(zcur()) + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + "</div>" + inkBar() +
+      '<button type="button" class="zbadge" data-zreset title="Zpět na celé schéma">' + Math.round(zcur().z * 100) + " %</button></div>" +
     '<figcaption class="legend">' + lg + "</figcaption>" +
     (p.nai ? '<div class="opts">' +
       (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
@@ -765,7 +766,7 @@ function inkBar() {
 function inkPath(pts) { return "M" + pts.map(function (q) { return q[0] + " " + q[1]; }).join(" L"); }
 function inkSvg(list) {
   return '<svg class="ink" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + list.map(function (q) {
-    return '<path d="' + inkPath(q.p) + '" stroke="' + q.c + '"/>';
+    return '<path d="' + inkPath(q.p) + '" stroke="' + q.c + '" style="--w:' + (q.z || 1) + '"/>';
   }).join("") + "</svg>";
 }
 function inkList() { return Object.keys(INK).map(function (k) { return INK[k]; }).slice(-40); }
@@ -776,16 +777,16 @@ function mergeInk(list) {
     if (!q || typeof q.k !== "string" || q.k.length > 24 || INKC.indexOf(q.c) < 0 || !Array.isArray(q.p) || !q.p.length || q.p.length > 2000) return;
     if (!PROBS.some(function (p) { return p.id === q.id; })) return;
     var pts = q.p.filter(function (a) { return Array.isArray(a) && pct(a[0]) != null && pct(a[1]) != null; }).map(function (a) { return [a[0], a[1]]; });
-    if (pts.length === q.p.length) INK[q.k] = { k: q.k, id: q.id, c: q.c, p: pts };
+    if (pts.length === q.p.length) INK[q.k] = { k: q.k, id: q.id, c: q.c, p: pts, z: typeof q.z === "number" && q.z >= 1 && q.z <= ZMAX ? q.z : 1 };
   });
 }
 function inkPt(pap, e) {
-  var r = pap.getBoundingClientRect();
+  var r = zEl(pap).getBoundingClientRect();
   return [+Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)).toFixed(2), +Math.max(0, Math.min(100, (e.clientY - r.top) / r.height * 100)).toFixed(2)];
 }
 /* eraser: remove every stroke of this problem that passes within 9 px of the pointer */
 function inkErase(pap, e) {
-  var r = pap.getBoundingClientRect(), sx = r.width / 100, sy = r.height / 100, x = e.clientX - r.left, y = e.clientY - r.top, id = PROBS[st.pi].id, hit = false;
+  var r = zEl(pap).getBoundingClientRect(), sx = r.width / 100, sy = r.height / 100, x = e.clientX - r.left, y = e.clientY - r.top, id = PROBS[st.pi].id, hit = false;
   Object.keys(INK).forEach(function (k) {
     var q = INK[k];
     if (q.id !== id) return;
@@ -819,10 +820,109 @@ function undo(redo) {
   var a = (from[key] || []).pop();
   if (a) (to[key] = to[key] || []).push(doStep(key, a, !redo));
 }
+/* ---------- zoom inside the schematic: Ctrl+wheel or touchpad pinch (the browser sends those as Ctrl+wheel), two-finger
+   pinch on touch screens. Zoomed in: wheel / drag pans. One zoom per problem, shared with the room. ---------- */
+var ZOOM = {}, ZMAX = 8, zPts = {}, zG = null, zT = null;
+function zcur() { return ZOOM[PROBS[st.pi].id] || { z: 1, x: 0, y: 0 }; }
+function zEl(pap) { return pap.querySelector(".zoom") || pap; }
+function zStyle(v) { return "--z:" + v.z + ";--zx:" + v.x + ";--zy:" + v.y; }
+function zClamp(v) {
+  var z = Math.max(1, Math.min(ZMAX, v.z)), m = 1 - 1 / z;
+  if (z < 1.02) return { z: 1, x: 0, y: 0 };
+  return { z: z, x: Math.max(0, Math.min(m, v.x)), y: Math.max(0, Math.min(m, v.y)) };
+}
+/* zoom to nz keeping the picture point under u (fractions of the visible window) in place */
+function zAt(v, u, nz) { return { z: nz, x: v.x + u[0] / v.z - u[0] / nz, y: v.y + u[1] / v.z - u[1] / nz }; }
+function zApply() {
+  var el = document.querySelector("#main .zoom");
+  if (!el) return;
+  var v = zcur(), pap = el.parentNode;
+  el.style.cssText = zStyle(v);
+  pap.classList.toggle("zoomed", v.z > 1);
+  pap.querySelector(".zbadge").textContent = Math.round(v.z * 100) + " %";
+}
+function zSet(v) {
+  ZOOM[PROBS[st.pi].id] = zClamp(v); zApply();
+  if (RT && !zT) zT = setTimeout(function () { /* at most ~25 updates/s, always the latest */
+    zT = null;
+    var id = PROBS[st.pi].id, w = ZOOM[id];
+    if (RT && w) rtSend("zoom", { id: id, z: +w.z.toFixed(3), x: +w.x.toFixed(4), y: +w.y.toFixed(4) });
+  }, 40);
+}
+/* zoom from other people's browsers: validate before use */
+function zMerge(d) {
+  if (!d || typeof d.id !== "string" || !PROBS.some(function (p) { return p.id === d.id; })) return;
+  if (![d.z, d.x, d.y].every(function (n) { return typeof n === "number" && isFinite(n); })) return;
+  ZOOM[d.id] = zClamp(d);
+  if (d.id === PROBS[st.pi].id && !zG) zApply();
+}
+function zU(pap, x, y) { var r = pap.getBoundingClientRect(); return [(x - r.left) / r.width, (y - r.top) / r.height]; }
+(function () { /* self-check: zooming in and back out at the same point returns to the start */
+  var a = zAt({ z: 1, x: 0, y: 0 }, [0.3, 0.6], 2.5), b = zClamp(zAt(a, [0.3, 0.6], 1));
+  console.assert(Math.abs(a.x + 0.3 / 2.5 - 0.3) < 1e-9 && b.z === 1 && b.x === 0, "zoom anchor");
+})();
+document.addEventListener("wheel", function (e) {
+  var pap = st.view === "ex" && e.target.closest && e.target.closest("#main .paper");
+  if (!pap) return; /* outside the schematic Ctrl+wheel stays the browser's page zoom */
+  var v = zcur(), k = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1, dy = e.deltaY * k, dx = e.deltaX * k;
+  if (e.ctrlKey) {
+    e.preventDefault();
+    var f = Math.exp(-Math.sign(dy) * Math.min(Math.abs(dy) * 0.01, 0.2)); /* pinch deltas are small; a mouse notch is capped at ~1.2x */
+    zSet(zAt(v, zU(pap, e.clientX, e.clientY), v.z * f));
+    return;
+  }
+  if (v.z <= 1) return;
+  var r = pap.getBoundingClientRect();
+  if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+  var n = zClamp({ z: v.z, x: v.x + dx / r.width / v.z, y: v.y + dy / r.height / v.z });
+  if (n.x === v.x && n.y === v.y) return; /* at the edge: let the page scroll */
+  e.preventDefault(); zSet(n);
+}, { passive: false });
+/* a gesture starts from the current pointers: two touches pinch, one pointer drags the zoomed picture */
+function zStart(pap) {
+  var ids = Object.keys(zPts);
+  if (!ids.length) { zG = null; return; }
+  var a = zPts[ids[0]], b = zPts[ids[1]] || a;
+  zG = { pap: pap, v: zcur(), u: zU(pap, (a.x + b.x) / 2, (a.y + b.y) / 2), d: Math.hypot(a.x - b.x, a.y - b.y) || 1, two: ids.length > 1 };
+}
+document.addEventListener("pointerdown", function (e) {
+  if (st.view !== "ex") return;
+  var pap = e.target.closest && e.target.closest("#main .paper");
+  if (!pap || e.target.closest(".ink-bar, .pin, .zbadge")) return;
+  if (e.pointerType === "touch") { /* every finger on the schematic is counted, also one that is drawing */
+    zPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var n = Object.keys(zPts).length;
+    if (n > 2 || (n === 1 && (st.tool || zcur().z <= 1))) return; /* one finger draws, or scrolls the page at 100 % */
+  } else {
+    if (zG || st.tool || eraserTip(e) || e.button !== 0 || zcur().z <= 1) return;
+    zPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+  }
+  if (inkNow && !inkNow.erase) inkNow.live.remove(); /* a second finger turns a stroke into a pinch */
+  inkNow = null;
+  e.preventDefault();
+  try { pap.setPointerCapture(e.pointerId); } catch (x) {}
+  zStart(pap);
+});
+document.addEventListener("pointermove", function (e) {
+  if (!zG || !zPts[e.pointerId]) return;
+  zPts[e.pointerId] = { x: e.clientX, y: e.clientY };
+  var ids = Object.keys(zPts), a = zPts[ids[0]], b = zPts[ids[1]] || a, g = zG, v = g.v;
+  var u = zU(g.pap, (a.x + b.x) / 2, (a.y + b.y) / 2), nz = g.two && b !== a ? v.z * Math.hypot(a.x - b.x, a.y - b.y) / g.d : v.z;
+  zSet({ z: nz, x: v.x + g.u[0] / v.z - u[0] / nz, y: v.y + g.u[1] / v.z - u[1] / nz });
+});
+function zEnd(e) {
+  if (!zPts[e.pointerId]) return;
+  delete zPts[e.pointerId];
+  if (zG) zStart(zG.pap); /* the remaining finger carries on panning */
+}
+document.addEventListener("pointerup", zEnd);
+document.addEventListener("pointercancel", zEnd);
+document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-zreset]")) zSet({ z: 1, x: 0, y: 0 }); });
+
 var inkNow = null;
 document.addEventListener("pointerdown", function (e) {
   var tip = eraserTip(e);
-  if (st.view !== "ex" || (!st.tool && !tip) || (e.button > 0 && !tip)) return;
+  if (zG || st.view !== "ex" || (!st.tool && !tip) || (e.button > 0 && !tip)) return;
   var pap = e.target.closest && e.target.closest("#main .paper");
   if (!pap || e.target.closest(".ink-bar, .pin")) return;
   e.preventDefault();
@@ -831,9 +931,10 @@ document.addEventListener("pointerdown", function (e) {
   if (st.tool === "erase" || tip) { inkNow = { erase: true, pap: pap }; inkErase(pap, e); return; }
   var live = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   live.setAttribute("class", "ink ink-live"); live.setAttribute("viewBox", "0 0 100 100"); live.setAttribute("preserveAspectRatio", "none");
-  live.innerHTML = '<path stroke="' + st.inkC + '"/>';
-  pap.appendChild(live);
-  inkNow = { pap: pap, live: live, q: { k: newCode() + newCode(), id: PROBS[st.pi].id, c: st.inkC, p: [inkPt(pap, e)] } };
+  var zz = +zcur().z.toFixed(3); /* the line looks 3 px wide now, so thinner once you zoom back out */
+  live.innerHTML = '<path stroke="' + st.inkC + '" style="--w:' + zz + '"/>';
+  zEl(pap).appendChild(live);
+  inkNow = { pap: pap, live: live, q: { k: newCode() + newCode(), id: PROBS[st.pi].id, c: st.inkC, p: [inkPt(pap, e)], z: zz } };
   live.firstChild.setAttribute("d", inkPath(inkNow.q.p));
 });
 document.addEventListener("pointermove", function (e) {
@@ -945,7 +1046,7 @@ function mergePins(list) {
   });
 }
 function drawShared() {
-  var pap = document.querySelector("#main .paper"), old = pap && pap.querySelector(".shared");
+  var pap = document.querySelector("#main .zoom"), old = pap && pap.querySelector(".shared");
   if (old) old.remove();
   if (!pap || st.view !== "ex") return;
   var id = PROBS[st.pi].id, lay = document.createElement("div");
@@ -997,9 +1098,9 @@ function rtRecv(msg, pid) {
   if (pid) m.p2p = pid; else m.seen = Date.now();
   var d = msg.d;
   if (msg.t === "bye") { delete RT.members[msg.f]; delete RT.cur[msg.f]; isNew = false; drawShared(); }
-  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList(), pad: padState() }, msg.f);
+  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList(), pad: padState(), zoom: ZOOM }, msg.f);
   /* a newcomer asks for the current view once; whoever has been in the room longer answers, never the newcomer */
-  if (msg.t === "hi" && d && typeof d === "object") { mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
+  if (msg.t === "hi" && d && typeof d === "object") { if (d.zoom && typeof d.zoom === "object") Object.keys(d.zoom).slice(0, 200).forEach(function (id) { var w = d.zoom[id]; if (w) zMerge({ id: id, z: w.z, x: w.x, y: w.y }); }); mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
   if (msg.t === "view") applyView(d);
   if (msg.t === "ptr" && d && typeof d.id === "string") {
     var x = pct(d.x), y = pct(d.y);
@@ -1014,6 +1115,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "bshow" && d && (d.k === null || (typeof d.k === "string" && /^[a-z]{1,10}(\.\d{1,2})?$/.test(d.k)))) showBlock(d.k);
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
+  if (msg.t === "zoom") zMerge(d);
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
 /* ---- relay path: Trystero's own Nostr relay sockets, ephemeral events, AES-GCM with a key from the room code ---- */
@@ -1024,7 +1126,7 @@ function relaySetup(T, code) {
   return Promise.all([crypto.subtle.digest("SHA-256", te.encode("nai-sbirka/topic/" + code)), crypto.subtle.digest("SHA-256", te.encode("nai-sbirka/key/" + code))]).then(function (h) {
     return crypto.subtle.importKey("raw", h[1], "AES-GCM", false, ["encrypt", "decrypt"]).then(function (key) {
       var topic = Array.from(new Uint8Array(h[0])).map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
-      return { T: T, key: key, topic: topic, sub: "nai" + newCode() + newCode(), socks: new WeakSet(), ptrNext: null, ptrTimer: null };
+      return { T: T, key: key, topic: topic, sub: "nai" + newCode() + newCode(), socks: new WeakSet(), next: {}, timer: null };
     });
   });
 }
@@ -1058,9 +1160,9 @@ function relayIn(e) {
 function relayPub(msg) {
   var R = RT && RT.relay;
   if (!R) return;
-  if (msg.t === "ptr") { /* relays rate-limit, so at most 4 pointer updates per second, always the latest */
-    R.ptrNext = msg;
-    if (!R.ptrTimer) R.ptrTimer = setTimeout(function () { R.ptrTimer = null; var m = R.ptrNext; R.ptrNext = null; if (m) relayRaw(R, m); }, 250);
+  if (msg.t === "ptr" || msg.t === "zoom") { /* relays rate-limit, so at most 4 pointer / zoom updates per second, always the latest */
+    R.next[msg.t] = msg;
+    if (!R.timer) R.timer = setTimeout(function () { R.timer = null; var n = R.next; R.next = {}; Object.keys(n).forEach(function (t) { relayRaw(R, n[t]); }); }, 250);
     return;
   }
   relayRaw(R, msg);
@@ -1121,14 +1223,14 @@ document.addEventListener("pointermove", function (e) {
   var now = Date.now();
   if (now - ptrAt < 40) return; /* ~25 updates/s is plenty for a pointer */
   ptrAt = now; ptrIn = true;
-  var r = pap.getBoundingClientRect();
+  var r = zEl(pap).getBoundingClientRect();
   rtSend("ptr", { id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2) });
 });
 document.addEventListener("dblclick", function (e) {
   if (!RT || st.view !== "ex") return;
   var pap = e.target.closest && e.target.closest("#main .paper");
-  if (!pap || st.tool || e.target.closest(".pin, .ink-bar")) return;
-  var r = pap.getBoundingClientRect();
+  if (!pap || st.tool || e.target.closest(".pin, .ink-bar, .zbadge")) return;
+  var r = zEl(pap).getBoundingClientRect();
   var t = window.prompt("Poznámka k tomuto místu (uvidí ji všichni v místnosti, může být prázdná):", "");
   if (t === null) return;
   var q = { k: newCode() + newCode(), id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2), t: t.trim().slice(0, 200) };
