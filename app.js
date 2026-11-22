@@ -232,7 +232,7 @@ function headHtml(p) {
 }
 function taskHtml(p) {
   var nai = p.nai, m = p.m;
-  var h = '<section class="task"><p class="section-label">Zadání</p><div class="txt">' + (nai ? nai.task : fmt(m.task)) + "</div>";
+  var h = '<section class="task" aria-label="Zadání"><div class="txt">' + (nai ? nai.task : fmt(m.task)) + "</div>";
   if (m.given) h += '<ul class="given">' + m.given.map(function (g) { return "<li>" + fmt(g) + "</li>"; }).join("") + "</ul>";
   var bl = blocksOf(PROBS.indexOf(p));
   if (nai) h += '<div class="tags">' + nai.pat.map(function (k) { return '<button class="tag" type="button" data-pat="' + k + '">' + esc(PATTERNS[k] ? PATTERNS[k].name : k) + "</button>"; }).join("") + "</div>";
