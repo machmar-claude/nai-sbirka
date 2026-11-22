@@ -468,7 +468,13 @@ function render(focusSel) {
   renderSide();
   var main = $("#main");
   try { if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([main]); } catch (e) {}
+  /* the steps column scrolls on its own on wide screens; keep its position when the same problem and mode is redrawn */
+  var oldCol = main.querySelector(".grid > .col"), colKey = st.view === "ex" ? PROBS[st.pi].id + "|" + curMode(PROBS[st.pi]) : "";
+  var colTop = oldCol && main.dataset.colKey === colKey ? oldCol.scrollTop : 0;
   main.innerHTML = st.view === "vzory" ? renderVzory() : st.view === "tahak" ? renderTahak() : st.view === "bloky" ? renderBloky() : renderExample();
+  var newCol = main.querySelector(".grid > .col");
+  if (newCol) newCol.scrollTop = colTop;
+  main.dataset.colKey = colKey;
   typeset(main);
   if (focusSel) { var el = document.getElementById(focusSel); if (el) el.focus({ preventScroll: true }); }
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
