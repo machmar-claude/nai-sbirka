@@ -713,10 +713,11 @@ document.addEventListener("keydown", function (ev) {
   var tg = ev.target, i = tg.dataset && tg.dataset.inp;
   if (i != null) { if (ev.key === "Enter") { ev.preventDefault(); check(+i); } return; }
   if (tg.id === "rtcode" && ev.key === "Enter") { rtJoin(tg.value, false); return; }
-  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey && String(ev.key).toLowerCase() === "z") {
+  var zk = String(ev.key).toLowerCase();
+  if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (zk === "z" || zk === "y")) { /* Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo */
     if (tg.id === "ptext") LASTSURF = "pad";
     else if (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.isContentEditable) return;
-    ev.preventDefault(); undo(); return;
+    ev.preventDefault(); undo(zk === "y" || ev.shiftKey); return;
   }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
   var tag = tg.tagName;
@@ -798,21 +799,25 @@ function inkErase(pap, e) {
 }
 /* undo: your own actions per surface (a problem's schematic, or "pad"); Ctrl+Z undoes the latest on the surface you
    used last. Each step is replayed to the room with the normal draw / erase / pin messages. */
-var UNDO = {}, LASTSURF = null, padBurst = null;
-function undoPush(key, a) { var u = UNDO[key] = UNDO[key] || []; u.push(a); if (u.length > 200) u.shift(); }
+var UNDO = {}, REDO = {}, LASTSURF = null, padBurst = null;
+/* a new action of your own: remember it for undo and drop the redo history of that surface */
+function undoPush(key, a) { var u = UNDO[key] = UNDO[key] || []; u.push(a); if (u.length > 200) u.shift(); REDO[key] = []; }
 /* a pen's eraser end reports button 5 (buttons bit 32) */
 function eraserTip(e) { return e.pointerType === "pen" && (e.button === 5 || (e.buttons & 32) === 32); }
-function undo() {
-  var key = LASTSURF === "pad" ? "pad" : PROBS[st.pi].id, a = (UNDO[key] || []).pop();
-  if (!a) return;
-  if (a.ink === "add" && INK[a.q.k]) { delete INK[a.q.k]; if (RT) rtSend("erase", a.q.k); }
-  if (a.ink === "del") { INK[a.q.k] = a.q; if (RT) rtSend("draw", a.q); }
-  if (a.pin === "add" && RT && RT.pins[a.q.k]) { delete RT.pins[a.q.k]; rtSend("unpin", a.q.k); }
-  if (a.pin === "del" && RT) { RT.pins[a.q.k] = a.q; rtSend("pin", a.q); }
-  if (a.pad === "add" && PAD.s[a.q.k]) { delete PAD.s[a.q.k]; if (RT) rtSend("pade", { k: a.q.k }); }
-  if (a.pad === "del") { PAD.s[a.q.k] = a.q; if (RT) rtSend("padd", a.q); }
-  if (a.text != null) { clearTimeout(padBurst); padBurst = null; padSetText(a.text); if (RT) rtSend("padt", { v: PAD.t }); }
+/* apply one history step backwards (undo) or forwards (redo); returns the entry for the opposite history */
+function doStep(key, a, back) {
+  var present = (a.ink || a.pin || a.pad) === "add" ? !back : back; /* does the item exist after this step */
+  if (a.ink) { if (present) { INK[a.q.k] = a.q; if (RT) rtSend("draw", a.q); } else if (INK[a.q.k]) { delete INK[a.q.k]; if (RT) rtSend("erase", a.q.k); } }
+  if (a.pin && RT) { if (present) { RT.pins[a.q.k] = a.q; rtSend("pin", a.q); } else if (RT.pins[a.q.k]) { delete RT.pins[a.q.k]; rtSend("unpin", a.q.k); } }
+  if (a.pad) { if (present) { PAD.s[a.q.k] = a.q; if (RT) rtSend("padd", a.q); } else if (PAD.s[a.q.k]) { delete PAD.s[a.q.k]; if (RT) rtSend("pade", { k: a.q.k }); } }
+  if (a.text != null) { var cur = PAD.t; clearTimeout(padBurst); padBurst = null; padSetText(a.text); if (RT) rtSend("padt", { v: PAD.t }); a = { text: cur }; }
   if (key === "pad") { padDraw(); padGrow(); } else drawShared();
+  return a;
+}
+function undo(redo) {
+  var key = LASTSURF === "pad" ? "pad" : PROBS[st.pi].id, from = redo ? REDO : UNDO, to = redo ? UNDO : REDO;
+  var a = (from[key] || []).pop();
+  if (a) (to[key] = to[key] || []).push(doStep(key, a, !redo));
 }
 var inkNow = null;
 document.addEventListener("pointerdown", function (e) {
@@ -946,7 +951,7 @@ function drawShared() {
   var id = PROBS[st.pi].id, lay = document.createElement("div");
   lay.className = "shared";
   lay.innerHTML = inkSvg(Object.keys(INK).map(function (k) { return INK[k]; }).filter(function (q) { return q.id === id; }));
-  if (RT && !st.clean) Object.keys(RT.pins).forEach(function (k) {
+  if (RT) Object.keys(RT.pins).forEach(function (k) {
     var q = RT.pins[k];
     if (q.id !== id) return;
     var b = document.createElement("button");
