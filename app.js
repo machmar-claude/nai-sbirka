@@ -442,8 +442,20 @@ function showBlock(k) {
   if (el) el.scrollIntoView({ block: "center" });
 }
 document.addEventListener("contextmenu", function (e) {
+  if (!RT || !e.target.closest) return;
+  var t = e.target.closest("#main [data-blk], #main [data-pat], #main .card[id^='pat-']");
+  if (!t) return;
+  e.preventDefault(); e.stopPropagation(); /* capture phase, before MathJax's own menu */
+  if (t.dataset.blk) { var k = t.dataset.blk === BON ? null : t.dataset.blk; rtSend("bshow", { k: k }); showBlock(k); return; }
+  var pk = t.dataset.pat || t.id.slice(4);
+  if (!PATTERNS[pk]) return;
+  if (pk === st.patFocus && st.view === "vzory") pk = null; /* right-click the shown one again to clear it */
+  rtSend("pshow", { k: pk });
+  showPat(pk);
+}, true);
+document.addEventListener("contextmenu", function (e) {
   if (!RT || st.view !== "bloky") return;
-  var t = e.target.closest && e.target.closest("#main [data-bk]");
+  var t = e.target.closest && !e.target.closest("[data-pat]") && e.target.closest("#main [data-bk]");
   if (!t) return;
   e.preventDefault(); e.stopPropagation(); /* capture phase, before MathJax's own menu */
   var k = t.dataset.bk === BON ? null : t.dataset.bk;
@@ -503,9 +515,9 @@ function showProblem(i) {
 }
 /* open Vzory at one pattern card, outlined until another is shown or the page is left */
 function showPat(k) {
-  st.patFocus = k;
-  if (st.view !== "vzory") { st.view = "vzory"; history.replaceState(null, "", "#vzory"); window.scrollTo(0, 0); }
-  render();
+  st.patFocus = k || null;
+  if (k && st.view !== "vzory") { st.view = "vzory"; history.replaceState(null, "", "#vzory"); window.scrollTo(0, 0); }
+  if (st.view === "vzory") render();
 }
 function showPage(v) { st.view = v; st.patFocus = st.patFocus || null; window.scrollTo(0, 0); render(); }
 function routeFromHash() {
@@ -650,9 +662,6 @@ document.addEventListener("click", function (ev) {
   if (d.pf) { st.pf = +d.pf; render(); return; }
   if (d.nai) { st.mode = "learn"; st.ns = +d.nai; render(); return; }
   if (d.prac) { st.mode = "practice"; st.pf = +d.prac; render(); return; }
-  /* in a room a chip opens and highlights the item for everyone, like right-click */
-  if (d.blk && RT) { rtSend("bshow", { k: d.blk }); showBlock(d.blk); return; }
-  if (d.pat && RT && PATTERNS[d.pat]) { rtSend("pshow", { k: d.pat }); showPat(d.pat); return; }
   if (d.blk) { st.blkFocus = d.blk; if (location.hash === "#bloky") showPage("bloky"); else location.hash = "bloky"; return; }
   if (d.pat) { st.patFocus = d.pat; if (location.hash === "#vzory") showPage("vzory"); else location.hash = "vzory"; return; }
   if (d.know) { st.known[p.id] = !st.known[p.id]; render(); return; }
@@ -837,12 +846,13 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat vzorec nebo blok</b>: pravý klik na něj (list vzorců, stránka Bloky)</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
+    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
   var p = PROBS[st.pi];
-  return st.view !== "ex" ? { v: st.view } : { v: "ex", id: p.id, mode: curMode(p), ns: st.ns, pf: st.pf, allhl: !!st.allhl, clean: !!st.clean,
+  /* always the problem state, also while you are on a page: Vzory, Co na tahák and Bloky are personal */
+  return { v: "ex", id: p.id, mode: curMode(p), ns: st.ns, pf: st.pf, allhl: !!st.allhl, clean: !!st.clean,
            done: p.m.steps.map(function (_, i) { return i; }).filter(function (i) { return solved(p, i); }) };
 }
 /* called from render(): broadcast my view when it changed, and redraw the shared layer */
@@ -857,11 +867,13 @@ function applyView(d) {
   RT.need = false;
   RT.applying = true;
   try {
-    if (d.v === "vzory" || d.v === "tahak" || d.v === "bloky") { st.view = d.v; history.replaceState(null, "", "#" + d.v); render(); return; }
+    if (d.v !== "ex") return;
     var i = PROBS.findIndex(function (p) { return p.id === d.id; });
     if (i < 0) return;
-    var p = PROBS[i], changed = st.lastId !== p.id;
-    st.view = "ex"; st.pi = i; st.lastId = p.id; st.openCh = p.ch; st.patFocus = null;
+    /* someone on a page stays there; their problem follows quietly, so "Příklady" takes them to the room's problem */
+    var p = PROBS[i], changed = st.lastId !== p.id, onPage = st.view !== "ex";
+    st.pi = i; st.lastId = p.id; st.openCh = p.ch;
+    if (!onPage) st.patFocus = null;
     st.mode = d.mode === "practice" ? "practice" : "learn";
     st.ns = isFinite(d.ns) ? Math.max(0, d.ns | 0) : 0;
     st.pf = d.pf == null || !isFinite(d.pf) ? null : Math.max(0, d.pf | 0);
@@ -873,9 +885,9 @@ function applyView(d) {
       s.rev[k] = true;
       if (stp.ans != null) { s.val[k] = String(stp.ans).replace(".", ","); s.fb[k] = "ok"; }
     });
-    history.replaceState(null, "", "#" + p.m.id);
+    if (!onPage) history.replaceState(null, "", "#" + p.m.id);
     render();
-    if (changed) { window.scrollTo(0, 0); scrollListToCurrent(); }
+    if (changed && !onPage) { window.scrollTo(0, 0); scrollListToCurrent(); }
   } finally { RT.applying = false; }
 }
 /* everything below arrives from other people's browsers: validate before use */
@@ -956,7 +968,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
   if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
-  if (msg.t === "pshow" && d && typeof d.k === "string" && PATTERNS[d.k]) showPat(d.k);
+  if (msg.t === "pshow" && d && (d.k === null || (typeof d.k === "string" && PATTERNS[d.k]))) showPat(d.k);
   if (msg.t === "bshow" && d && (d.k === null || (typeof d.k === "string" && /^[a-z]{1,10}(\.\d{1,2})?$/.test(d.k)))) showBlock(d.k);
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
