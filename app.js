@@ -354,7 +354,7 @@ function renderExample() {
   }
   var solo = !p.nai;
   return '<div class="sheet">' + headHtml(p) + taskHtml(p) +
-    '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool && !st.clean ? " inking " + st.tool : "") + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + inkBar() + "</div>" +
+    '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool ? " inking " + st.tool : "") + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + inkBar() + "</div>" +
     '<figcaption class="legend">' + lg + "</figcaption>" +
     (p.nai ? '<div class="opts">' +
       (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
@@ -755,7 +755,6 @@ var INK = {};
 var INKC = ["#e5484d", "#1e88e5", "#2e9e5b", "#ef6c00", "#8e44ad", "#15191e"];
 st.tool = null; st.inkC = INKC[0];
 function inkBar() {
-  if (st.clean) return "";
   return '<div class="ink-bar"><button type="button" data-ink="pen" title="Pero" aria-label="Pero" aria-pressed="' + (st.tool === "pen") + '">' +
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>' +
     '<button type="button" data-ink="erase" title="Guma: smaže celou čáru, které se dotkne" aria-label="Guma" aria-pressed="' + (st.tool === "erase") + '">' +
@@ -818,7 +817,7 @@ function undo() {
 var inkNow = null;
 document.addEventListener("pointerdown", function (e) {
   var tip = eraserTip(e);
-  if (st.clean || st.view !== "ex" || (!st.tool && !tip) || (e.button > 0 && !tip)) return;
+  if (st.view !== "ex" || (!st.tool && !tip) || (e.button > 0 && !tip)) return;
   var pap = e.target.closest && e.target.closest("#main .paper");
   if (!pap || e.target.closest(".ink-bar, .pin")) return;
   e.preventDefault();
@@ -946,7 +945,7 @@ function drawShared() {
   if (!pap || st.view !== "ex") return;
   var id = PROBS[st.pi].id, lay = document.createElement("div");
   lay.className = "shared";
-  if (!st.clean) lay.innerHTML = inkSvg(Object.keys(INK).map(function (k) { return INK[k]; }).filter(function (q) { return q.id === id; }));
+  lay.innerHTML = inkSvg(Object.keys(INK).map(function (k) { return INK[k]; }).filter(function (q) { return q.id === id; }));
   if (RT && !st.clean) Object.keys(RT.pins).forEach(function (k) {
     var q = RT.pins[k];
     if (q.id !== id) return;
