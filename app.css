@@ -101,6 +101,7 @@ main { min-width: 0; background: var(--paper); color: var(--ink); font-family: v
 .given { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .given li { font-family: var(--font-mono); font-size: 12.5px; background: var(--sheet); border: 1px solid var(--rule); padding: 2px 8px; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tags + .tags { margin-top: 6px; }
 .tag { font-size: 12px; padding: 1px 9px; border-radius: 999px; background: var(--idea-soft); color: var(--idea); border: 1px solid transparent; cursor: pointer; }
 .tag:hover { border-color: var(--idea); }
 

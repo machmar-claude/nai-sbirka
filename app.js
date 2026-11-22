@@ -235,8 +235,8 @@ function taskHtml(p) {
   var h = '<section class="task"><p class="section-label">Zadání</p><div class="txt">' + (nai ? nai.task : fmt(m.task)) + "</div>";
   if (m.given) h += '<ul class="given">' + m.given.map(function (g) { return "<li>" + fmt(g) + "</li>"; }).join("") + "</ul>";
   var bl = blocksOf(PROBS.indexOf(p));
-  if (nai || bl.length) h += '<div class="tags">' + (nai ? nai.pat.map(function (k) { return '<button class="tag" type="button" data-pat="' + k + '">' + esc(PATTERNS[k] ? PATTERNS[k].name : k) + "</button>"; }).join("") : "") +
-    bl.map(function (b) { return '<button class="tag blk" type="button" data-blk="' + b.k + '" title="Otevřít blok na stránce Bloky">▣ ' + esc(b.name) + "</button>"; }).join("") + "</div>";
+  if (nai) h += '<div class="tags">' + nai.pat.map(function (k) { return '<button class="tag" type="button" data-pat="' + k + '">' + esc(PATTERNS[k] ? PATTERNS[k].name : k) + "</button>"; }).join("") + "</div>";
+  if (bl.length) h += '<div class="tags">' + bl.map(function (b) { return '<button class="tag blk" type="button" data-blk="' + b.k + '" title="Otevřít blok na stránce Bloky">▣ ' + esc(b.name) + "</button>"; }).join("") + "</div>";
   return h + "</section>";
 }
 function learnHtml(p) {
@@ -501,6 +501,12 @@ function showProblem(i) {
   render();
   if (changed) { window.scrollTo(0, 0); scrollListToCurrent(); }
 }
+/* open Vzory at one pattern card, outlined until another is shown or the page is left */
+function showPat(k) {
+  st.patFocus = k;
+  if (st.view !== "vzory") { st.view = "vzory"; history.replaceState(null, "", "#vzory"); window.scrollTo(0, 0); }
+  render();
+}
 function showPage(v) { st.view = v; st.patFocus = st.patFocus || null; window.scrollTo(0, 0); render(); }
 function routeFromHash() {
   var h = "";
@@ -644,6 +650,9 @@ document.addEventListener("click", function (ev) {
   if (d.pf) { st.pf = +d.pf; render(); return; }
   if (d.nai) { st.mode = "learn"; st.ns = +d.nai; render(); return; }
   if (d.prac) { st.mode = "practice"; st.pf = +d.prac; render(); return; }
+  /* in a room a chip opens and highlights the item for everyone, like right-click */
+  if (d.blk && RT) { rtSend("bshow", { k: d.blk }); showBlock(d.blk); return; }
+  if (d.pat && RT && PATTERNS[d.pat]) { rtSend("pshow", { k: d.pat }); showPat(d.pat); return; }
   if (d.blk) { st.blkFocus = d.blk; if (location.hash === "#bloky") showPage("bloky"); else location.hash = "bloky"; return; }
   if (d.pat) { st.patFocus = d.pat; if (location.hash === "#vzory") showPage("vzory"); else location.hash = "vzory"; return; }
   if (d.know) { st.known[p.id] = !st.known[p.id]; render(); return; }
@@ -947,6 +956,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
   if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
+  if (msg.t === "pshow" && d && typeof d.k === "string" && PATTERNS[d.k]) showPat(d.k);
   if (msg.t === "bshow" && d && (d.k === null || (typeof d.k === "string" && /^[a-z]{1,10}(\.\d{1,2})?$/.test(d.k)))) showBlock(d.k);
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
