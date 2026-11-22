@@ -257,18 +257,18 @@ function headHtml(p) {
 function taskHtml(p) {
   var nai = p.nai, m = p.m;
   var h = '<section class="task" aria-label="Zadání"><div class="txt">' + (nai ? nai.task : fmt(m.task)) + "</div>";
-  if (m.given) h += '<ul class="given">' + m.given.map(function (g) { return "<li>" + fmt(g) + "</li>"; }).join("") + "</ul>";
+  if (m.given) h += '<ul class="given">' + m.given.map(function (g, i) { return '<li data-hl="g' + i + '">' + fmt(g) + "</li>"; }).join("") + "</ul>";
   var bl = blocksOf(PROBS.indexOf(p));
   if (nai) h += '<div class="tags">' + nai.pat.map(function (k) { return '<button class="tag" type="button" data-pat="' + k + '">' + esc(PATTERNS[k] ? PATTERNS[k].name : k) + "</button>"; }).join("") + "</div>";
   if (bl.length) h += '<div class="tags">' + bl.map(function (b) { return '<button class="tag blk" type="button" data-blk="' + b.k + '" title="Otevřít blok na stránce Bloky">▣ ' + esc(b.name) + "</button>"; }).join("") + "</div>";
   return h + "</section>";
 }
 function learnHtml(p) {
-  var e = p.nai, st_ = "";
+  var e = p.nai, st_ = "", rn = 0;
   e.steps.forEach(function (s, k) {
-    var eq = "";
-    if (s.g && s.g.length) eq += s.g.map(function (x) { return '<div class="row gen">$' + x + "$</div>"; }).join("");
-    if (s.eq && s.eq.length) eq += s.eq.map(function (x) { return '<div class="row">$' + x + "$</div>"; }).join("");
+    var eq = "", j = 0;
+    if (s.g && s.g.length) eq += s.g.map(function (x) { return '<div class="row gen" data-hl="e' + k + "." + (j++) + '">$' + x + "$</div>"; }).join("");
+    if (s.eq && s.eq.length) eq += s.eq.map(function (x) { return '<div class="row" data-hl="e' + k + "." + (j++) + '">$' + x + "$</div>"; }).join("");
     var x = "";
     if (p.link) {
       var pr = [];
@@ -277,17 +277,17 @@ function learnHtml(p) {
                     : '<p class="xnone">K tomuto kroku nic nepočítáš, jen vysvětluje zapojení.</p>';
     }
     st_ += '<li class="lstep ' + (k === st.ns ? "on" : "") + " " + (k < st.ns ? "done" : "") + '"><button class="lhead" type="button" data-k="' + k + '"><span class="n">' + (k + 1) + '</span><span class="t">' + s.t + "</span></button>" +
-      '<div class="lbody">' + (s.x || "") + (eq ? '<div class="eq">' + eq + "</div>" : "") + (s.r ? '<div class="res">' + s.r + "</div>" : "") + (s.m ? '<div class="mem">' + s.m + "</div>" : "") + (s.w ? '<div class="warn">' + s.w + "</div>" : "") + x + "</div></li>";
+      '<div class="lbody">' + (s.x || "") + (eq ? '<div class="eq">' + eq + "</div>" : "") + (s.r ? '<div class="res" data-hl="e' + k + 'r">' + s.r + "</div>" : "") + (s.m ? '<div class="mem">' + s.m + "</div>" : "") + (s.w ? '<div class="warn">' + s.w + "</div>" : "") + x + "</div></li>";
   });
-  var tk = (e.tk || []).map(function (t) {
+  var tk = (e.tk || []).map(function (t, i) {
     var cls = t[1] === "T" ? "on" : t[1] === "+" ? "add" : "der", lab = t[1] === "T" ? "na taháku" : t[1] === "+" ? "doplnit" : "odvodit";
-    return '<div class="tk"><span class="badge ' + cls + '">' + lab + "</span><div>$" + t[0] + "$" + (t[2] ? ' <span class="kbd">· ' + t[2] + "</span>" : "") + "</div></div>";
+    return '<div class="tk" data-hl="tk' + i + '"><span class="badge ' + cls + '">' + lab + "</span><div>$" + t[0] + "$" + (t[2] ? ' <span class="kbd">· ' + t[2] + "</span>" : "") + "</div></div>";
   }).join("");
   return '<div class="idea"><b>Myšlenka v jedné větě:</b> ' + e.idea + "</div>" +
     '<ol class="lsteps ' + (st.showall ? "showall" : "") + '">' + st_ + "</ol>" +
     '<div class="navrow"><button class="btn" type="button" data-nav="prev">← Předchozí krok</button><button class="btn" type="button" data-nav="all">' + (st.showall ? "Sbalit kroky" : "Rozbalit všechny kroky") + '</button><button class="btn primary" type="button" data-nav="next">Další krok →</button></div>' +
     '<p class="kbd">Klávesy: → nebo mezerník další krok, ← předchozí krok, J další příklad, K předchozí příklad.</p>' +
-    (e.res ? '<div class="box"><h3>Výsledky</h3><div>' + e.res + "</div></div>" : "") +
+    (e.res ? '<div class="box"><h3>Výsledky</h3><div>' + e.res.replace(/\$[^$]+\$/g, function (x) { return '<span data-hl="r' + (rn++) + '">' + x + "</span>"; }) + "</div></div>" : "") +
     (tk ? '<div class="box"><h3>Vzorce v tomto příkladu</h3>' + tk + "</div>" : "");
 }
 function practiceHtml(p) {
@@ -376,7 +376,7 @@ function renderVzory() {
     var pt = PATTERNS[k];
     var ids = PROBS.filter(function (p) { return p.nai && p.nai.pat.indexOf(k) >= 0; }).map(function (p) { return p.id; });
     h += '<div class="card ' + (st.patFocus === k ? "focus" : "") + '" id="pat-' + k + '"><h3>' + esc(pt.name) + "</h3><div>" + pt.d + "</div>" +
-      (pt.f ? '<div class="eq">' + pt.f.map(function (x) { return '<div class="row">$' + x + "$</div>"; }).join("") + "</div>" : "") +
+      (pt.f ? '<div class="eq">' + pt.f.map(function (x, i) { return '<div class="row" data-hl="v.' + k + "." + i + '">$' + x + "$</div>"; }).join("") + "</div>" : "") +
       (ids.length ? '<div><b>Příklady:</b> ' + exLinks(ids) + "</div>" : "") + "</div>";
   });
   return h + "</div></div>";
@@ -387,7 +387,7 @@ function renderTahak() {
     [["V<sub>T</sub>", "26 mV"], ["V<sub>BG</sub>", "1,25 V"], ["TC(V<sub>BE</sub>)", "−2 mV/K"], ["k", "1,38·10⁻²³ J/K"], ["q", "1,602·10⁻¹⁹ C"], ["4kT", "1,656·10⁻²⁰ J"]]
       .map(function (c) { return "<div><dt>" + c[0] + "</dt><dd>" + c[1] + "</dd></div>"; }).join("") + "</dl></div>";
   h += '<div class="card"><p class="section-label">Vzorce</p><div class="tbl"><table><tr><th>Priorita</th><th>Vzorec</th><th>K čemu</th><th>Kde se použije</th></tr>';
-  TAHAK.forEach(function (t) { h += "<tr><td><b>" + t.p + "</b></td><td>" + t.f.map(function (x) { return '<div style="padding:3px 0">$' + x + "$</div>"; }).join("") + "</td><td>" + t.d + "</td><td>" + exLinks(t.ex) + "</td></tr>"; });
+  TAHAK.forEach(function (t, i) { h += '<tr data-hl="t' + i + '"><td><b>' + t.p + "</b></td><td>" + t.f.map(function (x) { return '<div style="padding:3px 0">$' + x + "$</div>"; }).join("") + "</td><td>" + t.d + "</td><td>" + exLinks(t.ex) + "</td></tr>"; });
   return h + "</table></div></div></div>";
 }
 
@@ -435,15 +435,15 @@ function cropHtml(c) {
 }
 function renderBloky() {
   var h = '<div class="sheet"><header class="head"><div class="bignum">B</div><div class="meta"><span>Obvodové bloky, ze kterých se skládají příklady</span></div><div class="tools"></div><h2>Bloky</h2></header>' +
-    (RT ? '<p class="bhint">Pravým klikem na blok nebo jeho variantu ho ukážeš ostatním v místnosti. Dalším pravým klikem zvýraznění zrušíš.</p>' : "") + '<div class="cards">';
+    (RT ? '<p class="bhint">Pravým klikem na blok, jeho variantu nebo vzorec ho ukážeš ostatním v místnosti. Dalším pravým klikem zvýraznění zrušíš.</p>' : "") + '<div class="cards">';
   BLOKY.forEach(function (b) {
     var u = blkUse()[b.k], crops = u.crops.slice(0, 10);
     var ids = Object.keys(u.pis).map(Number).sort(function (a, c) { return a - c; }).map(function (pi) { return PROBS[pi].id; });
     h += '<section class="card blok" id="blk-' + b.k + '" data-bk="' + b.k + '"><h3>' + esc(b.name) + "</h3>" +
       '<div class="bsch">' + b.sch.map(function (x) { return "<figure>" + x[0] + (x[1] ? "<figcaption>" + esc(x[1]) + "</figcaption>" : "") + "</figure>"; }).join("") + "</div>" +
-      "<p>" + b.d + '</p><div class="eq">' + b.f.map(function (x) { return '<div class="row">$' + x + "$</div>"; }).join("") + "</div>" +
+      "<p>" + b.d + '</p><div class="eq">' + b.f.map(function (x, i) { return '<div class="row" data-hl="b.' + b.k + "." + i + '">$' + x + "$</div>"; }).join("") + "</div>" +
       (b.v.length ? '<p class="section-label">Varianty</p><ul class="bvar">' + b.v.map(function (v, j) {
-        return '<li data-bk="' + b.k + "." + j + '"><b>' + esc(v.n) + "</b>" + (v.d ? ": " + v.d : "") + (v.f ? ' <span class="bf">$' + v.f + "$</span>" : "") + "</li>";
+        return '<li data-bk="' + b.k + "." + j + '"><b>' + esc(v.n) + "</b>" + (v.d ? ": " + v.d : "") + (v.f ? ' <span class="bf" data-hl="b.' + b.k + ".v" + j + '">$' + v.f + "$</span>" : "") + "</li>";
       }).join("") + "</ul>" : "") +
       (crops.length ? '<p class="section-label">Jak vypadá ve schématech příkladů</p><div class="bcrops">' + crops.map(cropHtml).join("") + "</div>" : "") +
       (b.pat.length ? '<p class="brel"><b>Vzory:</b> ' + b.pat.filter(function (k) { return PATTERNS[k]; }).map(function (k) { return '<button type="button" class="xlink" data-pat="' + k + '">' + esc(PATTERNS[k].name) + "</button>"; }).join("") + "</p>" : "") +
@@ -461,11 +461,41 @@ function markBlock() {
 }
 function showBlock(k) {
   BON = k || null;
+  if (BON) { HON = null; markHl(); }
   if (BON && st.view !== "bloky") { st.view = "bloky"; st.patFocus = null; history.replaceState(null, "", "#bloky"); render(); }
   else markBlock();
   var el = BON && document.querySelector('#main [data-bk="' + BON + '"]');
   if (el) el.scrollIntoView({ block: "center" });
 }
+/* ---------- right-click a formula line, a given value or a tahák row (anything with data-hl) to show it to the room.
+   One thing is shown at a time: it stays until something else is shown, the same one is right-clicked again, the room
+   moves to another problem or page, or you leave the room. ---------- */
+var HON = null; /* { pg: "ex:<problem id>" | "vzory" | "bloky" | "tahak", k: data-hl key } */
+function hlPage() { return st.view === "ex" ? "ex:" + PROBS[st.pi].id : st.view; }
+function markHl() {
+  document.querySelectorAll("#main .hon").forEach(function (el) { el.classList.remove("hon"); });
+  var el = HON && HON.pg === hlPage() && document.querySelector('#main [data-hl="' + HON.k + '"]');
+  if (el) el.classList.add("hon");
+  return el;
+}
+function showHl(d) {
+  HON = d && d.k ? { pg: d.pg, k: d.k } : null;
+  if (HON) { showFormula(-1); BON = null; markBlock(); }
+  if (HON && HON.pg.slice(0, 3) !== "ex:" && st.view !== HON.pg) { /* a line on a page opens that page, like a pattern or block does */
+    st.view = HON.pg; st.patFocus = null; history.replaceState(null, "", "#" + HON.pg); window.scrollTo(0, 0); render();
+  }
+  var el = markHl();
+  if (el) el.scrollIntoView({ block: "nearest" });
+}
+document.addEventListener("contextmenu", function (e) {
+  var t = RT && e.target.closest && e.target.closest("#main [data-hl]");
+  if (!t) return;
+  e.preventDefault(); e.stopImmediatePropagation(); /* capture phase: before MathJax's menu and the block / pattern handlers */
+  var d = { pg: hlPage(), k: t.dataset.hl };
+  if (HON && HON.pg === d.pg && HON.k === d.k) d.k = null; /* right-click it again to clear it for everyone */
+  rtSend("hl", d);
+  showHl(d);
+}, true);
 document.addEventListener("contextmenu", function (e) {
   if (!RT || !e.target.closest) return;
   var t = e.target.closest("#main [data-blk], #main [data-pat], #main .card[id^='pat-']");
@@ -509,6 +539,9 @@ function render(focusSel) {
   if (FON >= 0 && (st.view !== "ex" || PROBS[st.pi].id !== FON_P)) showFormula(-1); /* a new problem makes it stale */
   if (st.view !== "bloky") BON = null; /* leaving Bloky makes a shown block stale */
   markBlock();
+  /* another problem, or leaving the page it is on, makes a shown line stale (Vzory / tahák / Bloky open on top of a problem keep it) */
+  if (HON && (HON.pg.slice(0, 3) === "ex:" ? st.view === "ex" && HON.pg !== hlPage() : st.view !== HON.pg)) HON = null;
+  markHl();
   rtAfterRender();
   if (!RT) drawShared();
 }
@@ -992,7 +1025,7 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
+    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec (v listu, v krocích i na stránkách), zadanou hodnotu, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
@@ -1119,6 +1152,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (msg.t === "zoom") zMerge(d);
+  if (msg.t === "hl" && d && typeof d.pg === "string" && /^(ex:[\w.\-]{1,16}|vzory|bloky|tahak)$/.test(d.pg) && (d.k === null || (typeof d.k === "string" && /^[\w.\-]{1,40}$/.test(d.k)))) showHl(d);
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
 /* ---- relay path: Trystero's own Nostr relay sockets, ephemeral events, AES-GCM with a key from the room code ---- */
@@ -1215,7 +1249,7 @@ function rtLeave() {
   var R = RT.relay;
   if (R) setTimeout(function () { relaySocks(R).forEach(function (so) { try { so.send(JSON.stringify(["CLOSE", R.sub])); } catch (x) {} }); }, 1000);
   RT.timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
-  RT.room.leave(); RT = null; showFormula(-1); BON = null; markBlock();
+  RT.room.leave(); RT = null; showFormula(-1); BON = null; markBlock(); HON = null; markHl();
   setUrlRoom(null); drawShared(); rtUi();
 }
 var ptrAt = 0, ptrIn = false;
@@ -1329,6 +1363,7 @@ function showFormula(i) {
   var els = document.querySelectorAll('#dbody [data-f="' + i + '"]');
   if (i < 0 || !els.length) return;
   FON = i; FON_P = PROBS[st.pi].id;
+  HON = null; markHl();
   if (!DR.open) { DR.open = true; drApply(); save(); }
   var bd = $("#dbody"), br = bd.getBoundingClientRect(), er = els[0].getBoundingClientRect(), dr = els[1].getBoundingClientRect();
   bd.scrollTo(Math.max(0, er.left - br.left + bd.scrollLeft - 12), Math.max(0, er.top - br.top + bd.scrollTop - bd.clientHeight / 2 + (dr.bottom - er.top) / 2));
