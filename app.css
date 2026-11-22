@@ -126,7 +126,7 @@ main { min-width: 0; background: var(--paper); color: var(--ink); font-family: v
    without dragging the page along; narrow screens keep one normal page scroll */
 @container (min-width: 861px) {
   .grid:not(.solo) > .col { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain;
-    padding: 0 6px 56px 0; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent; }
+    padding: 0 6px calc(50dvh - 12px) 0; /* half the column's height of room below the last step */ scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent; }
 }
 .seg { display: inline-flex; border: 1px solid var(--ink); align-self: flex-start; }
 .seg button { border: 0; background: var(--sheet); padding: 6px 14px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
