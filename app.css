@@ -347,3 +347,6 @@ main { padding-bottom: 56px; }
 .pcanvas svg { position: absolute; left: 0; top: 0; pointer-events: none; }
 .pcanvas.drawing svg { pointer-events: auto; cursor: crosshair; touch-action: none; }
 .pcanvas.drawing textarea { pointer-events: none; }
+
+.dbody .flash { animation: fflash 2.4s ease-out; }
+@keyframes fflash { 0%, 35% { background: var(--accent-soft); box-shadow: -12px 0 0 var(--accent-soft), 12px 0 0 var(--accent-soft); } 100% { background: transparent; box-shadow: none; } }

@@ -708,7 +708,7 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<p>Ukazatel: najeď myší na schéma. Poznámka: dvojklik na schéma. Smazání: klik na poznámku.</p>" +
+    "<p>Ukazatel: najeď myší na schéma. Poznámka: dvojklik na schéma. Smazání: klik na poznámku. Vzorec ostatním ukážeš pravým klikem na něj v listu vzorců.</p>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
@@ -827,6 +827,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
   if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
+  if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= 0 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
@@ -1004,9 +1005,27 @@ new ResizeObserver(function () {
   r.style.setProperty("--sb", (w > 0 ? w : 24) + "px");
   r.style.setProperty("--sbo", (w > 0 ? 0 : 12) + "px");
 }).observe(document.documentElement);
+var fN = 0;
 $("#dbody").innerHTML = (window.VZORCE || []).map(function (g) {
-  return "<h3>" + esc(g.g) + "</h3><dl>" + g.f.map(function (x) { return "<dt>" + esc(x[0]) + "</dt><dd>$" + x[1] + "$</dd>"; }).join("") + "</dl>";
+  return "<h3>" + esc(g.g) + "</h3><dl>" + g.f.map(function (x) { var i = fN++; return '<dt data-f="' + i + '">' + esc(x[0]) + '</dt><dd data-f="' + i + '">$' + x[1] + "$</dd>"; }).join("") + "</dl>";
 }).join("");
+/* open the formula sheet at formula i and flash it (also when someone in the room points at it) */
+function showFormula(i) {
+  var els = document.querySelectorAll('#dbody [data-f="' + i + '"]');
+  if (!els.length) return;
+  if (!DR.open) { DR.open = true; drApply(); save(); }
+  var bd = $("#dbody"), br = bd.getBoundingClientRect(), er = els[0].getBoundingClientRect(), dr = els[1].getBoundingClientRect();
+  bd.scrollTo(Math.max(0, er.left - br.left + bd.scrollLeft - 12), Math.max(0, er.top - br.top + bd.scrollTop - bd.clientHeight / 2 + (dr.bottom - er.top) / 2));
+  els.forEach(function (el) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); });
+}
+/* in a room, right-click (long-press on touch) a formula to show it to everyone; alone, the normal menu stays */
+$("#dbody").addEventListener("contextmenu", function (e) {
+  var f = e.target.closest && e.target.closest("[data-f]");
+  if (!RT || !f) return;
+  e.preventDefault();
+  rtSend("fshow", { i: +f.dataset.f });
+  showFormula(+f.dataset.f);
+});
 
 /* ---------- scratchpad: type and draw. Text is monospace so a caret position converts to px for "Na aktivní místo".
    Coordinates are px of the canvas; the canvas grows to the content + 150 px so you can scroll further (never scrolls by
