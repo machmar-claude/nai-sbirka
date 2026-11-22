@@ -234,7 +234,9 @@ function taskHtml(p) {
   var nai = p.nai, m = p.m;
   var h = '<section class="task"><p class="section-label">Zadání</p><div class="txt">' + (nai ? nai.task : fmt(m.task)) + "</div>";
   if (m.given) h += '<ul class="given">' + m.given.map(function (g) { return "<li>" + fmt(g) + "</li>"; }).join("") + "</ul>";
-  if (nai) h += '<div class="tags">' + nai.pat.map(function (k) { return '<button class="tag" type="button" data-pat="' + k + '">' + esc(PATTERNS[k] ? PATTERNS[k].name : k) + "</button>"; }).join("") + "</div>";
+  var bl = blocksOf(PROBS.indexOf(p));
+  if (nai || bl.length) h += '<div class="tags">' + (nai ? nai.pat.map(function (k) { return '<button class="tag" type="button" data-pat="' + k + '">' + esc(PATTERNS[k] ? PATTERNS[k].name : k) + "</button>"; }).join("") : "") +
+    bl.map(function (b) { return '<button class="tag blk" type="button" data-blk="' + b.k + '" title="Otevřít blok na stránce Bloky">▣ ' + esc(b.name) + "</button>"; }).join("") + "</div>";
   return h + "</section>";
 }
 function learnHtml(p) {
@@ -384,8 +386,21 @@ function blkCrops(b) {
       out.push({ pi: pi, b: [x0, y0, x1 - x0, y1 - y0], t: "" });
     }
   });
-  return out.slice(0, 10);
+  return out;
 }
+/* per block: its crops and every problem that uses it (by pattern or found on the schematic); data is static, so cached */
+var BLK_USE = null;
+function blkUse() {
+  if (BLK_USE) return BLK_USE;
+  BLK_USE = {};
+  BLOKY.forEach(function (b) {
+    var u = BLK_USE[b.k] = { crops: blkCrops(b), pis: {} };
+    u.crops.forEach(function (c) { u.pis[c.pi] = true; });
+    PROBS.forEach(function (p, pi) { if (p.nai && b.pat.some(function (k) { return p.nai.pat.indexOf(k) >= 0; })) u.pis[pi] = true; });
+  });
+  return BLK_USE;
+}
+function blocksOf(pi) { return BLOKY.filter(function (b) { return blkUse()[b.k].pis[pi]; }); }
 function cropHtml(c) {
   var p = PROBS[c.pi], W = p.w, H = p.h, x = c.b[0] * W / 100, y = c.b[1] * H / 100, w = c.b[2] * W / 100, h = c.b[3] * H / 100;
   var m = Math.max(40, Math.max(w, h) * 0.35), X = Math.max(0, x - m), Y = Math.max(0, y - m), X2 = Math.min(W, x + w + m), Y2 = Math.min(H, y + h + m);
@@ -397,8 +412,8 @@ function renderBloky() {
   var h = '<div class="sheet"><header class="head"><div class="bignum">B</div><div class="meta"><span>Obvodové bloky, ze kterých se skládají příklady</span></div><div class="tools"></div><h2>Bloky</h2></header>' +
     (RT ? '<p class="bhint">Pravým klikem na blok nebo jeho variantu ho ukážeš ostatním v místnosti. Dalším pravým klikem zvýraznění zrušíš.</p>' : "") + '<div class="cards">';
   BLOKY.forEach(function (b) {
-    var crops = blkCrops(b);
-    var ids = PROBS.filter(function (p) { return p.nai && b.pat.some(function (k) { return p.nai.pat.indexOf(k) >= 0; }); }).map(function (p) { return p.id; });
+    var u = blkUse()[b.k], crops = u.crops.slice(0, 10);
+    var ids = Object.keys(u.pis).map(Number).sort(function (a, c) { return a - c; }).map(function (pi) { return PROBS[pi].id; });
     h += '<section class="card blok" id="blk-' + b.k + '" data-bk="' + b.k + '"><h3>' + esc(b.name) + "</h3>" +
       '<div class="bsch">' + b.sch.map(function (x) { return "<figure>" + x[0] + (x[1] ? "<figcaption>" + esc(x[1]) + "</figcaption>" : "") + "</figure>"; }).join("") + "</div>" +
       "<p>" + b.d + '</p><div class="eq">' + b.f.map(function (x) { return '<div class="row">$' + x + "$</div>"; }).join("") + "</div>" +
@@ -445,6 +460,7 @@ function render(focusSel) {
   typeset(main);
   if (focusSel) { var el = document.getElementById(focusSel); if (el) el.focus({ preventScroll: true }); }
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
+  if (st.view === "bloky" && st.blkFocus) { var bc = document.getElementById("blk-" + st.blkFocus); if (bc) { bc.classList.add("focus"); bc.scrollIntoView({ block: "start" }); } st.blkFocus = null; }
   updateReport();
   save();
   if (FON >= 0 && (st.view !== "ex" || PROBS[st.pi].id !== FON_P)) showFormula(-1); /* a new problem makes it stale */
@@ -485,7 +501,7 @@ function showProblem(i) {
   render();
   if (changed) { window.scrollTo(0, 0); scrollListToCurrent(); }
 }
-function showPage(v) { st.view = v; st.patFocus = st.patFocus || null; render(); window.scrollTo(0, 0); }
+function showPage(v) { st.view = v; st.patFocus = st.patFocus || null; window.scrollTo(0, 0); render(); }
 function routeFromHash() {
   var h = "";
   try { h = decodeURIComponent(location.hash.replace(/^#/, "")); } catch (e) {}
@@ -628,6 +644,7 @@ document.addEventListener("click", function (ev) {
   if (d.pf) { st.pf = +d.pf; render(); return; }
   if (d.nai) { st.mode = "learn"; st.ns = +d.nai; render(); return; }
   if (d.prac) { st.mode = "practice"; st.pf = +d.prac; render(); return; }
+  if (d.blk) { st.blkFocus = d.blk; if (location.hash === "#bloky") showPage("bloky"); else location.hash = "bloky"; return; }
   if (d.pat) { st.patFocus = d.pat; if (location.hash === "#vzory") showPage("vzory"); else location.hash = "vzory"; return; }
   if (d.know) { st.known[p.id] = !st.known[p.id]; render(); return; }
   if (d.plot) { pg(p).plot = !pg(p).plot; render(); return; }

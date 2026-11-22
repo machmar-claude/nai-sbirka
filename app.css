@@ -378,3 +378,6 @@ main { padding-bottom: 56px; }
 .card.blok.bon { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 40%, var(--sheet)); }
 .bvar li.bon { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .bon { animation: fpulse 1.4s ease-out; }
+.tag.blk { background: var(--accent-soft); color: var(--accent); }
+.tag.blk:hover { border-color: var(--accent); }
+.card.blok.focus { outline: 2px solid var(--accent); }
