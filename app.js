@@ -602,7 +602,7 @@ document.addEventListener("click", function (ev) {
   }
   if (d.pin) {
     var q = RT && RT.pins[d.pin];
-    if (q && window.confirm(q.t ? "Smazat poznámku „" + q.t + "“ pro všechny?" : "Smazat tuto značku pro všechny?")) { delete RT.pins[d.pin]; rtSend("unpin", d.pin); drawShared(); }
+    if (q && window.confirm(q.t ? "Smazat poznámku „" + q.t + "“ pro všechny?" : "Smazat tuto značku pro všechny?")) { LASTSURF = "schem"; undoPush(q.id, { pin: "del", q: q }); delete RT.pins[d.pin]; rtSend("unpin", d.pin); drawShared(); }
     return;
   }
   if (d.sys) {
@@ -665,6 +665,11 @@ document.addEventListener("keydown", function (ev) {
   var tg = ev.target, i = tg.dataset && tg.dataset.inp;
   if (i != null) { if (ev.key === "Enter") { ev.preventDefault(); check(+i); } return; }
   if (tg.id === "rtcode" && ev.key === "Enter") { rtJoin(tg.value, false); return; }
+  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey && String(ev.key).toLowerCase() === "z") {
+    if (tg.id === "ptext") LASTSURF = "pad";
+    else if (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.isContentEditable) return;
+    ev.preventDefault(); undo(); return;
+  }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
   var tag = tg.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tg.isContentEditable) return;
@@ -731,19 +736,39 @@ function inkErase(pap, e) {
     for (var i = 0; i < q.p.length; i++) {
       var ax = q.p[i][0] * sx, ay = q.p[i][1] * sy, b = q.p[Math.min(i + 1, q.p.length - 1)], bx = b[0] * sx, by = b[1] * sy;
       var dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L)) : 0;
-      if (Math.hypot(x - ax - t * dx, y - ay - t * dy) < 9) { delete INK[k]; hit = true; if (RT) rtSend("erase", k); return; }
+      if (Math.hypot(x - ax - t * dx, y - ay - t * dy) < 9) { undoPush(id, { ink: "del", q: q }); delete INK[k]; hit = true; if (RT) rtSend("erase", k); return; }
     }
   });
   if (hit) drawShared();
 }
+/* undo: your own actions per surface (a problem's schematic, or "pad"); Ctrl+Z undoes the latest on the surface you
+   used last. Each step is replayed to the room with the normal draw / erase / pin messages. */
+var UNDO = {}, LASTSURF = null, padBurst = null;
+function undoPush(key, a) { var u = UNDO[key] = UNDO[key] || []; u.push(a); if (u.length > 200) u.shift(); }
+/* a pen's eraser end reports button 5 (buttons bit 32) */
+function eraserTip(e) { return e.pointerType === "pen" && (e.button === 5 || (e.buttons & 32) === 32); }
+function undo() {
+  var key = LASTSURF === "pad" ? "pad" : PROBS[st.pi].id, a = (UNDO[key] || []).pop();
+  if (!a) return;
+  if (a.ink === "add" && INK[a.q.k]) { delete INK[a.q.k]; if (RT) rtSend("erase", a.q.k); }
+  if (a.ink === "del") { INK[a.q.k] = a.q; if (RT) rtSend("draw", a.q); }
+  if (a.pin === "add" && RT && RT.pins[a.q.k]) { delete RT.pins[a.q.k]; rtSend("unpin", a.q.k); }
+  if (a.pin === "del" && RT) { RT.pins[a.q.k] = a.q; rtSend("pin", a.q); }
+  if (a.pad === "add" && PAD.s[a.q.k]) { delete PAD.s[a.q.k]; if (RT) rtSend("pade", { k: a.q.k }); }
+  if (a.pad === "del") { PAD.s[a.q.k] = a.q; if (RT) rtSend("padd", a.q); }
+  if (a.text != null) { clearTimeout(padBurst); padBurst = null; padSetText(a.text); if (RT) rtSend("padt", { v: PAD.t }); }
+  if (key === "pad") { padDraw(); padGrow(); } else drawShared();
+}
 var inkNow = null;
 document.addEventListener("pointerdown", function (e) {
-  if (!st.tool || st.clean || st.view !== "ex" || e.button > 0) return;
+  var tip = eraserTip(e);
+  if (st.clean || st.view !== "ex" || (!st.tool && !tip) || (e.button > 0 && !tip)) return;
   var pap = e.target.closest && e.target.closest("#main .paper");
   if (!pap || e.target.closest(".ink-bar, .pin")) return;
   e.preventDefault();
+  LASTSURF = "schem";
   try { pap.setPointerCapture(e.pointerId); } catch (x) {} /* keeps the line going when the pointer leaves the schematic */
-  if (st.tool === "erase") { inkNow = { erase: true, pap: pap }; inkErase(pap, e); return; }
+  if (st.tool === "erase" || tip) { inkNow = { erase: true, pap: pap }; inkErase(pap, e); return; }
   var live = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   live.setAttribute("class", "ink ink-live"); live.setAttribute("viewBox", "0 0 100 100"); live.setAttribute("preserveAspectRatio", "none");
   live.innerHTML = '<path stroke="' + st.inkC + '"/>';
@@ -765,6 +790,7 @@ function inkEnd() {
   if (n.erase) return;
   n.live.remove();
   INK[n.q.k] = n.q;
+  undoPush(n.q.id, { ink: "add", q: n.q });
   if (RT) rtSend("draw", n.q); /* the whole line, once it is finished */
   drawShared();
 }
@@ -1040,6 +1066,7 @@ document.addEventListener("dblclick", function (e) {
   if (t === null) return;
   var q = { k: newCode() + newCode(), id: PROBS[st.pi].id, x: +((e.clientX - r.left) / r.width * 100).toFixed(2), y: +((e.clientY - r.top) / r.height * 100).toFixed(2), t: t.trim().slice(0, 200) };
   q.by = RT.me; mergePins([q]); rtSend("pin", q); drawShared();
+  LASTSURF = "schem"; undoPush(q.id, { pin: "add", q: RT.pins[q.k] });
 });
 setInterval(function () { /* drop idle pointers and people who went quiet */
   if (!RT) return;
@@ -1207,6 +1234,9 @@ function padRecv(t, d) {
   if (t === "padhi") { if (!PAD.t && typeof d.t === "string") padSetText(d.t); padMerge(d.s); padDraw(); padGrow(); }
 }
 $("#ptext").addEventListener("input", function () {
+  LASTSURF = "pad";
+  if (!padBurst) undoPush("pad", { text: PAD.t });
+  clearTimeout(padBurst); padBurst = setTimeout(function () { padBurst = null; }, 1000);
   PAD.t = this.value.slice(0, 20000);
   padGrow();
   if (!RT) return;
@@ -1225,23 +1255,25 @@ function padErase(e) {
     for (var i = 0; i < p.length; i++) {
       var a = p[i], b = p[Math.min(i + 1, p.length - 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
       var t = L ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / L)) : 0;
-      if (Math.hypot(pt[0] - a[0] - t * dx, pt[1] - a[1] - t * dy) < 9) { delete PAD.s[k]; hit = true; if (RT) rtSend("pade", { k: k }); return; }
+      if (Math.hypot(pt[0] - a[0] - t * dx, pt[1] - a[1] - t * dy) < 9) { undoPush("pad", { pad: "del", q: PAD.s[k] }); delete PAD.s[k]; hit = true; if (RT) rtSend("pade", { k: k }); return; }
     }
   });
   if (hit) padDraw();
 }
-var pink = $("#pink");
-pink.addEventListener("pointerdown", function (e) {
-  if (PADT === "text" || e.button > 0) return;
+var pink = $("#pink"), pcan = $("#pcanvas");
+pcan.addEventListener("pointerdown", function (e) {
+  var tip = eraserTip(e);
+  if (!tip && (PADT === "text" || e.button > 0)) return;
   e.preventDefault();
-  try { pink.setPointerCapture(e.pointerId); } catch (x) {}
-  if (PADT === "erase") { padNow = { erase: true }; padErase(e); return; }
+  LASTSURF = "pad"; clearTimeout(padBurst); padBurst = null;
+  try { pcan.setPointerCapture(e.pointerId); } catch (x) {}
+  if (PADT === "erase" || tip) { padNow = { erase: true }; padErase(e); return; }
   var live = document.createElementNS("http://www.w3.org/2000/svg", "path");
   live.setAttribute("stroke", PADC); pink.appendChild(live);
   padNow = { live: live, q: { k: newCode() + newCode(), c: PADC, p: [padPt(e)] } };
   live.setAttribute("d", inkPath(padNow.q.p));
 });
-pink.addEventListener("pointermove", function (e) {
+pcan.addEventListener("pointermove", function (e) {
   if (!padNow) return;
   if (padNow.erase) { padErase(e); return; }
   var pt = padPt(e), last = padNow.q.p[padNow.q.p.length - 1];
@@ -1258,11 +1290,12 @@ function padEnd() {
   if (n.erase) return;
   n.live.remove();
   PAD.s[n.q.k] = n.q;
+  undoPush("pad", { pad: "add", q: n.q });
   if (RT) rtSend("padd", n.q); /* the whole line, once it is finished */
   padDraw(); padGrow();
 }
-pink.addEventListener("pointerup", padEnd);
-pink.addEventListener("pointercancel", padEnd);
+pcan.addEventListener("pointerup", padEnd);
+pcan.addEventListener("pointercancel", padEnd);
 padTools();
 
 /* ---------- start ---------- */
