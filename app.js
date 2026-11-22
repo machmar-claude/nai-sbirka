@@ -25,6 +25,7 @@ var PROBS = MPC.map(function (m) {
 var st = { view: "ex", pi: 0, mode: "learn", ns: 0, pf: null, showall: false, allhl: false,
            known: {}, prog: {}, patFocus: null, theme: null, lastId: null, q: "", confirmReset: false };
 var DR = { open: false, top: 120, w: 380, h: 420 }; /* formula drawer geometry, px */
+var PD = { open: false, top: 560, w: 420, h: 360 }; /* scratchpad drawer, starts below the formulas */
 
 function pg(p) {
   return st.prog[p.id] || (st.prog[p.id] = { ok: [], rev: [], hint: [], val: [], fb: [], plot: false });
@@ -38,7 +39,7 @@ function snapshot() {
   });
   var known = {};
   Object.keys(st.known).forEach(function (k) { if (st.known[k]) known[k] = true; });
-  return { v: 1, prog: prog, known: known, last: PROBS[st.pi].id, mode: st.mode, ns: st.ns, theme: st.theme, drawer: DR };
+  return { v: 1, prog: prog, known: known, last: PROBS[st.pi].id, mode: st.mode, ns: st.ns, theme: st.theme, drawer: DR, pad: PD };
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) {}
@@ -82,10 +83,12 @@ function load() {
     mergeState(s);
     /* The page always opens in Pochopit; the saved mode is not restored. */
     if (s.theme === "light" || s.theme === "dark") st.theme = s.theme;
-    if (s.drawer && typeof s.drawer === "object") {
-      ["top", "w", "h"].forEach(function (k) { if (isFinite(s.drawer[k])) DR[k] = +s.drawer[k]; });
-      DR.open = s.drawer.open === true;
-    }
+    [["drawer", DR], ["pad", PD]].forEach(function (x) {
+      var o = s[x[0]];
+      if (!o || typeof o !== "object") return;
+      ["top", "w", "h"].forEach(function (k) { if (isFinite(o[k])) x[1][k] = +o[k]; });
+      x[1].open = o.open === true;
+    });
     var i = PROBS.findIndex(function (p) { return p.id === s.last; });
     if (i >= 0) { st.pi = i; st.lastId = PROBS[i].id; if (typeof s.ns === "number" && s.ns >= 0) st.ns = s.ns | 0; }
   } catch (e) {}
@@ -488,6 +491,18 @@ document.addEventListener("click", function (ev) {
     else if (d.rt === "copy") { var l = $("#rtlink"); (navigator.clipboard ? navigator.clipboard.writeText(l.value) : Promise.reject()).then(function () { rtMsg("Odkaz zkopírován."); }, function () { l.select(); rtMsg("Zkopíruj odkaz ručně (Ctrl+C)."); }); }
     return;
   }
+  if (d.pad) {
+    if (d.pad === "active") {
+      var bd = $("#pbody");
+      if (PAD.act) {
+        var to = { left: Math.max(0, PAD.act.x - bd.clientWidth / 2), top: Math.max(0, PAD.act.y - bd.clientHeight / 2) };
+        bd.scrollTo({ left: to.left, top: to.top, behavior: "smooth" });
+        setTimeout(function () { if (Math.abs(bd.scrollLeft - to.left) + Math.abs(bd.scrollTop - to.top) > 40) bd.scrollTo(to.left, to.top); }, 600); /* where smooth scrolling doesn't run */
+      }
+    } else if (d.pad === "color") { PADC = INKC[(INKC.indexOf(PADC) + 1) % INKC.length]; PADT = "pen"; padTools(); }
+    else { PADT = PADT === d.pad ? null : d.pad; padTools(); }
+    return;
+  }
   if (d.ink) {
     if (d.ink === "color") { st.inkC = INKC[(INKC.indexOf(st.inkC) + 1) % INKC.length]; if (!st.tool) st.tool = "pen"; }
     else st.tool = st.tool === d.ink ? null : d.ink;
@@ -799,9 +814,9 @@ function rtRecv(msg, pid) {
   if (pid) m.p2p = pid; else m.seen = Date.now();
   var d = msg.d;
   if (msg.t === "bye") { delete RT.members[msg.f]; delete RT.cur[msg.f]; isNew = false; drawShared(); }
-  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList() }, msg.f);
+  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList(), pad: padState() }, msg.f);
   /* a newcomer asks for the current view once; whoever has been in the room longer answers, never the newcomer */
-  if (msg.t === "hi" && d && typeof d === "object") { mergePins(d.pins); mergeInk(d.ink); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
+  if (msg.t === "hi" && d && typeof d === "object") { mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
   if (msg.t === "view") applyView(d);
   if (msg.t === "ptr" && d && typeof d.id === "string") {
     var x = pct(d.x), y = pct(d.y);
@@ -811,6 +826,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "pin" && d && typeof d === "object") { d.by = msg.f; mergePins([d]); drawShared(); }
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
+  if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
@@ -937,42 +953,50 @@ setInterval(function () { /* drop idle pointers and people who went quiet */
   if (gone || Object.keys(RT.cur).length) drawShared();
 }, 1000);
 
-/* ---------- formula drawer: click the handle to slide it, drag the handle to move it
-   up/down or (when open) push it back toward the edge, drag the bottom grip to resize ---------- */
+/* ---------- side drawers (formulas, scratchpad): click the handle to slide it, drag the handle to move it
+   up/down or (when open) push it back toward the edge, drag the bottom edge to resize ---------- */
 /* fit to the window for display only, so a small window never overwrites the remembered size */
 function drFit(o) {
   var vw = window.innerWidth, vh = window.innerHeight;
   var w = Math.max(160, Math.min(o.w, vw - 36)), h = Math.max(90, Math.min(o.h, vh - 16));
   return { w: w, h: h, top: Math.max(8, Math.min(o.top, vh - h - 8)) };
 }
-function drApply() {
-  var d = $("#drawer"), p = $("#dpanel"), f = drFit(DR);
-  d.classList.toggle("open", DR.open);
+var DRAWERS = [
+  { s: DR, root: "#drawer", panel: "#dpanel", handle: "#dhandle", grip: "#dgrip" },
+  { s: PD, root: "#pad", panel: "#ppanel", handle: "#phandle", grip: "#pgrip", onOpen: function () { padGrow(); if (RT) rtSend("pado"); } }
+];
+function drApply(D) {
+  if (!D || !D.s) { DRAWERS.forEach(drApply); return; }
+  var d = $(D.root), p = $(D.panel), f = drFit(D.s);
+  d.classList.toggle("open", D.s.open);
   d.style.top = f.top + "px"; d.style.setProperty("--dt", f.top + "px");
   p.style.width = f.w + "px"; p.style.height = f.h + "px";
-  p.inert = !DR.open;
-  $("#dhandle").setAttribute("aria-expanded", String(DR.open));
+  p.inert = !D.s.open;
+  $(D.handle).setAttribute("aria-expanded", String(D.s.open));
 }
-function drDrag(el, move) {
+function drDrag(D, el, move) {
   var g = null;
-  el.addEventListener("pointerdown", function (e) { g = drFit(DR); g.x = e.clientX; g.y = e.clientY; g.moved = false; el.setPointerCapture(e.pointerId); el.moved = false; });
+  el.addEventListener("pointerdown", function (e) { g = drFit(D.s); g.x = e.clientX; g.y = e.clientY; g.moved = false; el.setPointerCapture(e.pointerId); el.moved = false; });
   el.addEventListener("pointermove", function (e) {
     if (!g) return;
     var dx = e.clientX - g.x, dy = e.clientY - g.y;
     if (!g.moved && Math.abs(dx) + Math.abs(dy) < 6) return; /* below this it is a click */
     g.moved = el.moved = true;
-    move(g, dx, dy); var f = drFit(DR); DR.top = f.top; DR.w = f.w; DR.h = f.h; drApply();
+    move(g, dx, dy); var f = drFit(D.s); D.s.top = f.top; D.s.w = f.w; D.s.h = f.h; drApply(D);
   });
-  function end() { if (g && g.moved) save(); g = null; }
+  function end() { if (g && g.moved) { save(); if (D.s === PD) padGrow(); } g = null; }
   el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
 }
-drDrag($("#dhandle"), function (g, dx, dy) { DR.top = g.top + dy; if (DR.open) DR.w = g.w - dx; });
-drDrag($("#dgrip"), function (g, dx, dy) { DR.h = g.h + dy; });
-$("#dhandle").addEventListener("click", function () {
-  if (this.moved) { this.moved = false; return; } /* the click that ends a drag */
-  DR.open = !DR.open; drApply(); save();
+DRAWERS.forEach(function (D) {
+  drDrag(D, $(D.handle), function (g, dx, dy) { D.s.top = g.top + dy; if (D.s.open) D.s.w = g.w - dx; });
+  drDrag(D, $(D.grip), function (g, dx, dy) { D.s.h = g.h + dy; });
+  $(D.handle).addEventListener("click", function () {
+    if (this.moved) { this.moved = false; return; } /* the click that ends a drag */
+    D.s.open = !D.s.open; drApply(D); save();
+    if (D.s.open && D.onOpen) D.onOpen();
+  });
 });
-window.addEventListener("resize", drApply);
+window.addEventListener("resize", function () { drApply(); });
 /* the closed handle grows by the scrollbar width. Classic scrollbars can be measured; overlay ones read 0 and are drawn
    over the page, so assume 12px and add that as padding the scrollbar covers, plus 12px visible. Re-measured on page resize. */
 new ResizeObserver(function () {
@@ -983,6 +1007,125 @@ new ResizeObserver(function () {
 $("#dbody").innerHTML = (window.VZORCE || []).map(function (g) {
   return "<h3>" + esc(g.g) + "</h3><dl>" + g.f.map(function (x) { return "<dt>" + esc(x[0]) + "</dt><dd>$" + x[1] + "$</dd>"; }).join("") + "</dl>";
 }).join("");
+
+/* ---------- scratchpad: type and draw. Text is monospace so a caret position converts to px for "Na aktivní místo".
+   Coordinates are px of the canvas; the canvas grows to the content + 150 px so you can scroll further (never scrolls by
+   itself). In a room the pad is shared: opening it opens it for everyone, closing is local. Kept for this visit only. ---------- */
+var PAD = { t: "", s: {}, act: null }, PADT = null, PADC = INKC[1], padTimer = null, padAtT = 0, padNow = null;
+var PAD_CW = 8.4, PAD_LH = 20, PAD_X0 = 10, PAD_Y0 = 8; /* 14px monospace: 0.6em per character */
+function padTools() {
+  $("#ptools").innerHTML =
+    '<button type="button" data-pad="pen" title="Pero" aria-label="Pero" aria-pressed="' + (PADT === "pen") + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>' +
+    '<button type="button" data-pad="erase" title="Guma: smaže celou čáru, které se dotkne" aria-label="Guma" aria-pressed="' + (PADT === "erase") + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19l-5-5 9.5-9.5a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19zM9 19h11M7.5 10.5l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></button>' +
+    '<button type="button" data-pad="color" title="Barva pera" aria-label="Barva pera"><i style="background:' + PADC + '"></i></button>' +
+    '<button type="button" class="pact" data-pad="active" title="Posune na místo, kde naposledy psal nebo kreslil někdo jiný"' + (PAD.act ? "" : " disabled") + ">Na aktivní místo</button>";
+  $("#pcanvas").classList.toggle("drawing", !!PADT);
+}
+function padDraw() { $("#pdone").innerHTML = Object.keys(PAD.s).map(function (k) { var q = PAD.s[k]; return '<path d="' + inkPath(q.p) + '" stroke="' + q.c + '"/>'; }).join(""); }
+/* grow the canvas when content gets within 150 px of its right or bottom edge */
+function padGrow(extra) {
+  var body = $("#pbody"), cv = $("#pcanvas"), lines = PAD.t.split("\n"), mx = 0, my = 0;
+  var cols = lines.reduce(function (a, l) { return Math.max(a, l.length); }, 0);
+  mx = PAD_X0 + cols * PAD_CW; my = PAD_Y0 + lines.length * PAD_LH;
+  Object.keys(PAD.s).forEach(function (k) { PAD.s[k].p.forEach(function (q) { if (q[0] > mx) mx = q[0]; if (q[1] > my) my = q[1]; }); });
+  if (extra) { mx = Math.max(mx, extra[0]); my = Math.max(my, extra[1]); }
+  var W = Math.ceil(Math.max(body.clientWidth, mx + 150)), H = Math.ceil(Math.max(body.clientHeight, my + 150));
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  var svg = $("#pink"); svg.setAttribute("width", W); svg.setAttribute("height", H);
+}
+function px(v) { return typeof v === "number" && v >= 0 && v <= 100000 ? v : null; }
+function padActive(x, y) {
+  if (px(x) == null || px(y) == null) return;
+  var first = !PAD.act;
+  PAD.act = { x: x, y: y };
+  if (first) padTools();
+}
+function padPt(e) { var r = $("#pcanvas").getBoundingClientRect(); return [Math.max(0, Math.round(e.clientX - r.left)), Math.max(0, Math.round(e.clientY - r.top))]; }
+function padState() { return { t: PAD.t, s: Object.keys(PAD.s).map(function (k) { return PAD.s[k]; }).slice(-30) }; }
+/* strokes from other people's browsers: validate before use */
+function padMerge(list) {
+  if (!Array.isArray(list)) return;
+  list.slice(0, 300).forEach(function (q) {
+    if (!q || typeof q.k !== "string" || q.k.length > 24 || INKC.indexOf(q.c) < 0 || !Array.isArray(q.p) || !q.p.length || q.p.length > 2000) return;
+    var ok = q.p.every(function (a) { return Array.isArray(a) && px(a[0]) != null && px(a[1]) != null; });
+    if (ok) PAD.s[q.k] = { k: q.k, c: q.c, p: q.p.map(function (a) { return [a[0], a[1]]; }) };
+  });
+}
+function padSetText(v) {
+  if (typeof v !== "string") return;
+  PAD.t = v.slice(0, 20000);
+  var ta = $("#ptext"), focused = document.activeElement === ta, a = ta.selectionStart, b = ta.selectionEnd;
+  ta.value = PAD.t;
+  if (focused) ta.setSelectionRange(Math.min(a, PAD.t.length), Math.min(b, PAD.t.length));
+}
+/* called from rtRecv for pad messages */
+function padRecv(t, d) {
+  if (t === "pado") { if (!PD.open) { PD.open = true; drApply(); padGrow(); save(); } return; }
+  if (!d || typeof d !== "object") return;
+  if (t === "padt" && typeof d.v === "string") { if (!padTimer) padSetText(d.v); padGrow(); padActive(d.x, d.y); }
+  if (t === "padd") { padMerge([d]); padDraw(); padGrow(); var l = PAD.s[d.k] && PAD.s[d.k].p.slice(-1)[0]; if (l) padActive(l[0], l[1]); }
+  if (t === "pade" && typeof d.k === "string" && PAD.s[d.k]) { delete PAD.s[d.k]; padDraw(); }
+  if (t === "padat") padActive(d.x, d.y);
+  if (t === "padhi") { if (!PAD.t && typeof d.t === "string") padSetText(d.t); padMerge(d.s); padDraw(); padGrow(); }
+}
+$("#ptext").addEventListener("input", function () {
+  PAD.t = this.value.slice(0, 20000);
+  padGrow();
+  if (!RT) return;
+  clearTimeout(padTimer);
+  var ta = this;
+  padTimer = setTimeout(function () { /* send the text once typing pauses, with the caret as the active spot */
+    padTimer = null;
+    var before = ta.value.slice(0, ta.selectionStart).split("\n");
+    rtSend("padt", { v: PAD.t, x: Math.round(PAD_X0 + before[before.length - 1].length * PAD_CW), y: Math.round(PAD_Y0 + (before.length - 0.5) * PAD_LH) });
+  }, 600);
+});
+function padErase(e) {
+  var pt = padPt(e), hit = false;
+  Object.keys(PAD.s).forEach(function (k) {
+    var p = PAD.s[k].p;
+    for (var i = 0; i < p.length; i++) {
+      var a = p[i], b = p[Math.min(i + 1, p.length - 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+      var t = L ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / L)) : 0;
+      if (Math.hypot(pt[0] - a[0] - t * dx, pt[1] - a[1] - t * dy) < 9) { delete PAD.s[k]; hit = true; if (RT) rtSend("pade", { k: k }); return; }
+    }
+  });
+  if (hit) padDraw();
+}
+var pink = $("#pink");
+pink.addEventListener("pointerdown", function (e) {
+  if (!PADT || e.button > 0) return;
+  e.preventDefault();
+  try { pink.setPointerCapture(e.pointerId); } catch (x) {}
+  if (PADT === "erase") { padNow = { erase: true }; padErase(e); return; }
+  var live = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  live.setAttribute("stroke", PADC); pink.appendChild(live);
+  padNow = { live: live, q: { k: newCode() + newCode(), c: PADC, p: [padPt(e)] } };
+  live.setAttribute("d", inkPath(padNow.q.p));
+});
+pink.addEventListener("pointermove", function (e) {
+  if (!padNow) return;
+  if (padNow.erase) { padErase(e); return; }
+  var pt = padPt(e), last = padNow.q.p[padNow.q.p.length - 1];
+  if (Math.abs(pt[0] - last[0]) + Math.abs(pt[1] - last[1]) < 3) return;
+  padNow.q.p.push(pt);
+  padNow.live.setAttribute("d", inkPath(padNow.q.p));
+  padGrow(pt);
+  var now = Date.now();
+  if (RT && now - padAtT > 500) { padAtT = now; rtSend("padat", { x: pt[0], y: pt[1] }); } /* where I am drawing, twice a second */
+});
+function padEnd() {
+  if (!padNow) return;
+  var n = padNow; padNow = null;
+  if (n.erase) return;
+  n.live.remove();
+  PAD.s[n.q.k] = n.q;
+  if (RT) rtSend("padd", n.q); /* the whole line, once it is finished */
+  padDraw(); padGrow();
+}
+pink.addEventListener("pointerup", padEnd);
+pink.addEventListener("pointercancel", padEnd);
+padTools();
 
 /* ---------- start ---------- */
 load();

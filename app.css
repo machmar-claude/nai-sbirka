@@ -332,3 +332,18 @@ main { padding-bottom: 56px; }
 .ink-bar svg { width: 18px; height: 18px; position: static; }
 .ink-bar i { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 2px var(--sheet), 0 0 0 3px var(--rule); }
 @media print { .ink-bar { display: none; } }
+
+/* ---------- scratchpad drawer (a layer below the formula sheet) ---------- */
+.drawer.pad { z-index: 39; }
+.drawer.pad .dhandle span, .drawer.pad.open .dhandle span { transform: none; font-size: 17px; }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 5px; padding-bottom: 5px; }
+.ink-bar.ptools { position: static; opacity: 1; padding: 0; gap: 4px; text-transform: none; letter-spacing: 0; }
+.ptools button { width: 26px; height: 26px; box-shadow: none; }
+.ptools .pact { width: auto; padding: 0 8px; font: 600 11.5px/1 var(--font-body); color: var(--accent); }
+.ptools .pact:disabled { color: var(--muted); opacity: .5; cursor: default; }
+.dbody.padbody { padding: 0; }
+.pcanvas { position: relative; min-width: 100%; min-height: 100%; }
+.pcanvas textarea { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 8px 10px; border: 0; outline: none; resize: none; overflow: hidden; white-space: pre; background: transparent; color: var(--ink); font: 14px/20px var(--font-mono); }
+.pcanvas svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+.pcanvas.drawing svg { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.pcanvas.drawing textarea { pointer-events: none; }

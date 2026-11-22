@@ -67,6 +67,14 @@ window.MathJax = {
     <div class="dgrip" id="dgrip" title="Táhni pro změnu výšky"></div>
   </section>
 </div>
+<div class="drawer pad" id="pad">
+  <button class="dhandle" id="phandle" type="button" aria-expanded="false" aria-controls="ppanel" aria-label="Poznámky" title="Poznámky: psaní a kreslení — klikni pro otevření, táhni pro posun"><span aria-hidden="true">✎</span></button>
+  <section class="dpanel" id="ppanel" aria-label="Poznámky">
+    <div class="dhead phead"><span>Poznámky</span><span class="ink-bar ptools" id="ptools"></span></div>
+    <div class="dbody padbody" id="pbody"><div class="pcanvas" id="pcanvas"><textarea id="ptext" spellcheck="false" wrap="off" aria-label="Poznámky: piš sem"></textarea><svg class="ink" id="pink" aria-hidden="true"><g id="pdone"></g></svg></div></div>
+    <div class="dgrip" id="pgrip" title="Táhni pro změnu výšky"></div>
+  </section>
+</div>
 <button class="rtchip" id="rtchip" type="button" popovertarget="rtpop" hidden></button>
 <a class="report" id="report" href="https://github.com/machmar-claude/nai-sbirka/issues/new" target="_blank" rel="noopener" title="Otevře nové hlášení na GitHubu (je potřeba účet GitHub)">Nahlásit chybu</a>
 <script src="data/nai.js"></script>
