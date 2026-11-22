@@ -354,3 +354,8 @@ main { padding-bottom: 56px; }
 
 .dbody .flash { animation: fflash 2.4s ease-out; }
 @keyframes fflash { 0%, 35% { background: var(--accent-soft); box-shadow: -12px 0 0 var(--accent-soft), 12px 0 0 var(--accent-soft); } 100% { background: transparent; box-shadow: none; } }
+.rthelp { margin: 6px 0 10px; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.rthelp li { margin: 2px 0; }
+.rthelp b { color: var(--ink); font-weight: 600; }
+.fhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.dhint { text-transform: none; letter-spacing: 0; font-family: var(--font-body); font-size: 11px; color: var(--muted); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

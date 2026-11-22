@@ -693,6 +693,7 @@ function rtUi() {
   var b = $("#rtbody"), c = RT ? rtCount() : { n: 0, r: 0 }, n = c.n;
   $("#rtbtn").classList.toggle("on", !!RT);
   $("#rtn").textContent = RT ? String(n + 1) : "";
+  $("#dhint").textContent = RT ? "pravý klik = ukázat ostatním" : "";
   var chip = $("#rtchip");
   chip.hidden = !RT;
   if (RT) {
@@ -708,7 +709,7 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<p>Ukazatel: najeď myší na schéma. Poznámka: dvojklik na schéma. Smazání: klik na poznámku. Vzorec ostatním ukážeš pravým klikem na něj v listu vzorců.</p>" +
+    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat vzorec</b>: pravý klik na vzorec v listu vzorců</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
