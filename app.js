@@ -375,6 +375,7 @@ function render(focusSel) {
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
   updateReport();
   save();
+  if (FON >= 0 && (st.view !== "ex" || PROBS[st.pi].id !== FON_P)) showFormula(-1); /* a new problem makes it stale */
   rtAfterRender();
   if (!RT) drawShared();
 }
@@ -828,7 +829,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
   if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
-  if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= 0 && d.i < 500) showFormula(d.i);
+  if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
@@ -923,7 +924,7 @@ function rtLeave() {
   var R = RT.relay;
   if (R) setTimeout(function () { relaySocks(R).forEach(function (so) { try { so.send(JSON.stringify(["CLOSE", R.sub])); } catch (x) {} }); }, 1000);
   RT.timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
-  RT.room.leave(); RT = null;
+  RT.room.leave(); RT = null; showFormula(-1);
   setUrlRoom(null); drawShared(); rtUi();
 }
 var ptrAt = 0, ptrIn = false;
@@ -1027,21 +1028,28 @@ $("#dbody").innerHTML = (window.VZORCE || []).map(function (g) {
   return "<h3>" + esc(g.g) + "</h3><dl>" + g.f.map(function (x) { var i = fN++; return '<dt data-f="' + i + '">' + esc(x[0]) + '</dt><dd data-f="' + i + '">$' + x[1] + "$</dd>"; }).join("") + "</dl>";
 }).join("");
 /* open the formula sheet at formula i and flash it (also when someone in the room points at it) */
+/* the shown formula stays highlighted until another one is shown, the same one is right-clicked again,
+   the room moves to another problem, or you leave the room. i = -1 clears it. */
+var FON = -1, FON_P = null;
 function showFormula(i) {
+  document.querySelectorAll("#dbody .fon").forEach(function (el) { el.classList.remove("fon"); });
+  FON = -1;
   var els = document.querySelectorAll('#dbody [data-f="' + i + '"]');
-  if (!els.length) return;
+  if (i < 0 || !els.length) return;
+  FON = i; FON_P = PROBS[st.pi].id;
   if (!DR.open) { DR.open = true; drApply(); save(); }
   var bd = $("#dbody"), br = bd.getBoundingClientRect(), er = els[0].getBoundingClientRect(), dr = els[1].getBoundingClientRect();
   bd.scrollTo(Math.max(0, er.left - br.left + bd.scrollLeft - 12), Math.max(0, er.top - br.top + bd.scrollTop - bd.clientHeight / 2 + (dr.bottom - er.top) / 2));
-  els.forEach(function (el) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); });
+  els.forEach(function (el) { el.classList.add("fon"); });
 }
 /* in a room, right-click (long-press on touch) a formula to show it to everyone; alone, the normal menu stays */
 $("#dbody").addEventListener("contextmenu", function (e) {
   var f = e.target.closest && e.target.closest("[data-f]");
   if (!RT || !f) return;
   e.preventDefault(); e.stopPropagation(); /* capture phase: MathJax would otherwise open its own menu on the formula */
-  rtSend("fshow", { i: +f.dataset.f });
-  showFormula(+f.dataset.f);
+  var i = +f.dataset.f === FON ? -1 : +f.dataset.f; /* right-click the highlighted one again to clear it for everyone */
+  rtSend("fshow", { i: i });
+  showFormula(i);
 }, true);
 
 /* ---------- scratchpad: type and draw. Text is monospace so a caret position converts to px for "Na aktivní místo".

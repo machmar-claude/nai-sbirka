@@ -352,8 +352,8 @@ main { padding-bottom: 56px; }
 .pcanvas.drawing svg { pointer-events: auto; cursor: crosshair; touch-action: none; }
 .pcanvas.drawing textarea { pointer-events: none; }
 
-.dbody .flash { animation: fflash 2.4s ease-out; }
-@keyframes fflash { 0%, 35% { background: var(--accent-soft); box-shadow: -12px 0 0 var(--accent-soft), 12px 0 0 var(--accent-soft); } 100% { background: transparent; box-shadow: none; } }
+.dbody .fon { background: var(--accent-soft); box-shadow: -12px 0 0 var(--accent-soft), 12px 0 0 var(--accent-soft), -15px 0 0 var(--accent); animation: fpulse 1.4s ease-out; } /* last shadow peeks out as a 3px bar on the left */
+@keyframes fpulse { 0%, 30% { background: color-mix(in srgb, var(--accent) 35%, var(--sheet)); } }
 .rthelp { margin: 6px 0 10px; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
 .rthelp li { margin: 2px 0; }
 .rthelp b { color: var(--ink); font-weight: 600; }
