@@ -98,11 +98,35 @@ function load() {
 function $(s) { return document.querySelector(s); }
 function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function fmt(t) { return esc(t).replace(/_\{([^}]+)\}/g, "<sub>$1</sub>").replace(/_([A-Za-z0-9]+)/g, "<sub>$1</sub>"); }
-function parseNum(t) {
-  var s = String(t).replace(/\s+/g, "").replace(/[\u2212\u2013]/g, "-").replace(",", ".");
-  if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return NaN;
-  return parseFloat(s);
+/* Answers: a bare number is in the field's unit; a prefix and/or unit after it is converted, so "125", "125k", "125 kΩ"
+   and "0,125M" are all 125 in a kΩ field. "m"/"M" count as both milli and mega: the answer is right if either fits. */
+var SIP = { p: [1e-12], n: [1e-9], u: [1e-6], "µ": [1e-6], "μ": [1e-6], m: [1e-3, 1e6], k: [1e3], g: [1e9] };
+var SIP_EXACT = { p: 1e-12, n: 1e-9, "µ": 1e-6, "μ": 1e-6, u: 1e-6, m: 1e-3, k: 1e3, M: 1e6, G: 1e9 };
+function prefixOf(part, exact) {
+  if (!part) return [1];
+  if (exact) { var f = SIP_EXACT[part[0]]; return f != null && part.length > 1 ? [f] : [1]; } /* the field's own unit, e.g. "kΩ", "MHz" */
+  return SIP[part[0].toLowerCase()] || [1];
 }
+/* factors of a unit like "kΩ", "µA/V", "V/µs" relative to the base unit (numerator prefix / denominator prefix) */
+function unitFactors(u, exact) {
+  var parts = String(u).split("/"), num = prefixOf(parts[0], exact), den = prefixOf((parts[1] || "").replace(/^√/, ""), exact), out = [];
+  num.forEach(function (a) { den.forEach(function (b) { out.push(a / b); }); });
+  return out;
+}
+function ansValues(raw, unit) {
+  var t = String(raw).replace(/\s+/g, "").replace(/[\u2212\u2013]/g, "-").replace(",", ".");
+  var m = /^([-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)(.*)$/i.exec(t);
+  if (!m || (m[2] && !/^[a-zµμΩω√%°\/]+$/i.test(m[2]))) return null;
+  var v = parseFloat(m[1]);
+  if (!m[2]) return [v];
+  var fu = unitFactors(unit || "", true)[0];
+  return unitFactors(m[2], false).map(function (f) { return v * f / fu; });
+}
+(function () { /* self-check of the cases above */
+  function has(r, x) { return !!r && r.some(function (v) { return Math.abs(v - x) < 1e-9 * Math.max(1, Math.abs(x)); }); }
+  console.assert(has(ansValues("125", "kΩ"), 125) && has(ansValues("125k", "kΩ"), 125) && has(ansValues("125 kohm", "kΩ"), 125) && has(ansValues("0,125M", "kΩ"), 125), "ansValues kΩ");
+  console.assert(has(ansValues("2m", "MΩ"), 2) && has(ansValues("2m", "mV"), 2) && has(ansValues("3u", "µA/V"), 3) && has(ansValues("5V/us", "V/µs"), 5) && ansValues("abc", "V") === null, "ansValues prefixes");
+})();
 function solved(p, i) { var s = pg(p); return !!(s.ok[i] || s.rev[i]); }
 function frontier(p) { for (var i = 0; i < p.m.steps.length; i++) if (!solved(p, i)) return i; return p.m.steps.length; }
 function doneCount(p) { var c = 0; for (var i = 0; i < p.m.steps.length; i++) if (solved(p, i)) c++; return c; }
@@ -284,7 +308,7 @@ function practiceHtml(p) {
       if (stp.ans != null) {
         var fb = s.fb[i];
         h += '<div class="answer"><input id="' + idp + '" data-inp="' + i + '" inputmode="decimal" autocomplete="off" aria-label="Výsledek v ' + esc(stp.unit) + '" value="' + esc(s.val[i] || "") + '"><span class="unit">' + esc(stp.unit) + '</span><button class="btn primary" type="button" data-act="check" data-i="' + i + '">Zkontrolovat</button>' +
-          (fb === "ok" ? '<span class="fb ok">Sedí</span>' : fb === "bad" ? '<span class="fb bad">Nesedí. Zkontroluj jednotku (' + esc(stp.unit) + ") nebo si vezmi nápovědu.</span>" : fb === "warn" ? '<span class="fb warn">Zadej číslo, třeba 12,5</span>' : "") + "</div>";
+          (fb === "ok" ? '<span class="fb ok">Sedí</span>' : fb === "bad" ? '<span class="fb bad">Nesedí. Zkontroluj jednotku (' + esc(stp.unit) + ") nebo si vezmi nápovědu.</span>" : fb === "warn" ? '<span class="fb warn">Zadej číslo, třeba 12,5 nebo 12,5k</span>' : "") + "</div>";
       } else {
         h += '<p class="noans">Tento krok je odvození. Napiš si ho na papír a porovnej s řešením.</p>';
       }
@@ -548,9 +572,9 @@ function check(i) {
   var inp = document.querySelector('[data-inp="' + i + '"]');
   var raw = inp ? inp.value : (s.val[i] || "");
   s.val[i] = raw;
-  var v = parseNum(raw);
-  if (isNaN(v)) { s.fb[i] = "warn"; render(inp ? inp.id : null); return; }
-  var good = [stp.ans].concat(stp.alt || []).some(function (a) { return Math.abs(v - a) <= (stp.tolAbs != null ? stp.tolAbs : 0.02 * Math.abs(a) + 1e-12); });
+  var vs = ansValues(raw, stp.unit);
+  if (!vs) { s.fb[i] = "warn"; render(inp ? inp.id : null); return; }
+  var good = [stp.ans].concat(stp.alt || []).some(function (a) { return vs.some(function (v) { return Math.abs(v - a) <= (stp.tolAbs != null ? stp.tolAbs : 0.02 * Math.abs(a) + 1e-12); }); });
   if (good) {
     s.ok[i] = true; s.fb[i] = "ok"; st.pf = null;
     var f = frontier(p);
