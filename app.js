@@ -184,7 +184,7 @@ function matches(p) {
 
 /* ---------- sidebar ---------- */
 function renderSide() {
-  var tabs = [["ex", "Příklady"], ["vzory", "Vzory"], ["tahak", "Co na tahák"]];
+  var tabs = [["ex", "Příklady"], ["vzory", "Vzory"], ["tahak", "Co na tahák"], ["bloky", "Bloky"]];
   $("#tabs").innerHTML = tabs.map(function (t) { return '<button type="button" data-tab="' + t[0] + '" aria-current="' + (t[0] === st.view) + '">' + t[1] + "</button>"; }).join("");
   var h = "", last = null, shown = 0;
   /* Mobile strip: each chapter is a tile; only the open chapter's problems show (CSS hides .fold). Search shows all matches. */
@@ -364,18 +364,92 @@ function renderTahak() {
   return h + "</table></div></div></div>";
 }
 
+/* ---------- Bloky: circuit blocks with a schematic, formulas, variants, and crops of the problem schematics where
+   each block appears (from the explanation's marked parts) ---------- */
+var BLOKY = window.BLOKY || [];
+/* where a block shows up: parts whose label matches g.re (each its own crop), or, for problems whose main pattern
+   is in g.pat, the parts of the first explanation step ("what circuit is this?") as one crop */
+function blkCrops(b) {
+  var out = [], g = b.g;
+  if (!g) return out;
+  PROBS.forEach(function (p, pi) {
+    var e = p.nai;
+    if (!e || !e.parts) return;
+    if (g.re) Object.keys(e.parts).forEach(function (k) { var q = e.parts[k]; if (q && q.b && q.t && g.re.test(q.t)) out.push({ pi: pi, b: q.b, t: q.t }); });
+    else if (g.pat && e.pat && g.pat.indexOf(e.pat[0]) >= 0 && e.steps && e.steps[0]) {
+      var bs = resolve(e, e.steps[0].h).filter(function (q) { return q.b; }).map(function (q) { return q.b; });
+      if (!bs.length) return;
+      var x0 = Math.min.apply(null, bs.map(function (r) { return r[0]; })), y0 = Math.min.apply(null, bs.map(function (r) { return r[1]; }));
+      var x1 = Math.max.apply(null, bs.map(function (r) { return r[0] + r[2]; })), y1 = Math.max.apply(null, bs.map(function (r) { return r[1] + r[3]; }));
+      out.push({ pi: pi, b: [x0, y0, x1 - x0, y1 - y0], t: "" });
+    }
+  });
+  return out.slice(0, 10);
+}
+function cropHtml(c) {
+  var p = PROBS[c.pi], W = p.w, H = p.h, x = c.b[0] * W / 100, y = c.b[1] * H / 100, w = c.b[2] * W / 100, h = c.b[3] * H / 100;
+  var m = Math.max(40, Math.max(w, h) * 0.35), X = Math.max(0, x - m), Y = Math.max(0, y - m), X2 = Math.min(W, x + w + m), Y2 = Math.min(H, y + h + m);
+  return '<button type="button" class="bcrop" data-go="' + c.pi + '" title="Otevřít příklad ' + p.id + '"><svg viewBox="' + [X, Y, X2 - X, Y2 - Y].map(Math.round).join(" ") + '" aria-hidden="true">' +
+    '<image href="' + p.img + '" width="' + W + '" height="' + H + '"/><rect x="' + Math.round(x) + '" y="' + Math.round(y) + '" width="' + Math.round(w) + '" height="' + Math.round(h) + '" rx="8" fill="#2148c4" fill-opacity=".1" stroke="#2148c4" stroke-width="' + Math.max(3, (X2 - X) / 90).toFixed(1) + '"/></svg>' +
+    "<span>" + p.id + (c.t ? " · " + esc(c.t) : "") + "</span></button>";
+}
+function renderBloky() {
+  var h = '<div class="sheet"><header class="head"><div class="bignum">B</div><div class="meta"><span>Obvodové bloky, ze kterých se skládají příklady</span></div><div class="tools"></div><h2>Bloky</h2></header>' +
+    (RT ? '<p class="bhint">Pravým klikem na blok nebo jeho variantu ho ukážeš ostatním v místnosti. Dalším pravým klikem zvýraznění zrušíš.</p>' : "") + '<div class="cards">';
+  BLOKY.forEach(function (b) {
+    var crops = blkCrops(b);
+    var ids = PROBS.filter(function (p) { return p.nai && b.pat.some(function (k) { return p.nai.pat.indexOf(k) >= 0; }); }).map(function (p) { return p.id; });
+    h += '<section class="card blok" id="blk-' + b.k + '" data-bk="' + b.k + '"><h3>' + esc(b.name) + "</h3>" +
+      '<div class="bsch">' + b.sch.map(function (x) { return "<figure>" + x[0] + (x[1] ? "<figcaption>" + esc(x[1]) + "</figcaption>" : "") + "</figure>"; }).join("") + "</div>" +
+      "<p>" + b.d + '</p><div class="eq">' + b.f.map(function (x) { return '<div class="row">$' + x + "$</div>"; }).join("") + "</div>" +
+      (b.v.length ? '<p class="section-label">Varianty</p><ul class="bvar">' + b.v.map(function (v, j) {
+        return '<li data-bk="' + b.k + "." + j + '"><b>' + esc(v.n) + "</b>" + (v.d ? ": " + v.d : "") + (v.f ? ' <span class="bf">$' + v.f + "$</span>" : "") + "</li>";
+      }).join("") + "</ul>" : "") +
+      (crops.length ? '<p class="section-label">Jak vypadá ve schématech příkladů</p><div class="bcrops">' + crops.map(cropHtml).join("") + "</div>" : "") +
+      (b.pat.length ? '<p class="brel"><b>Vzory:</b> ' + b.pat.filter(function (k) { return PATTERNS[k]; }).map(function (k) { return '<button type="button" class="xlink" data-pat="' + k + '">' + esc(PATTERNS[k].name) + "</button>"; }).join("") + "</p>" : "") +
+      (ids.length ? '<p class="brel"><b>Příklady:</b> ' + exLinks(ids) + "</p>" : "") + "</section>";
+  });
+  return h + "</div></div>";
+}
+/* a block (or one of its variants) shown to the room stays highlighted until another one is shown, the same one is
+   right-clicked again, someone leaves the Bloky page, or you leave the room */
+var BON = null;
+function markBlock() {
+  document.querySelectorAll("#main .bon").forEach(function (el) { el.classList.remove("bon"); });
+  var el = BON && st.view === "bloky" && document.querySelector('#main [data-bk="' + BON + '"]');
+  if (el) el.classList.add("bon");
+}
+function showBlock(k) {
+  BON = k || null;
+  if (BON && st.view !== "bloky") { st.view = "bloky"; st.patFocus = null; history.replaceState(null, "", "#bloky"); render(); }
+  else markBlock();
+  var el = BON && document.querySelector('#main [data-bk="' + BON + '"]');
+  if (el) el.scrollIntoView({ block: "center" });
+}
+document.addEventListener("contextmenu", function (e) {
+  if (!RT || st.view !== "bloky") return;
+  var t = e.target.closest && e.target.closest("#main [data-bk]");
+  if (!t) return;
+  e.preventDefault(); e.stopPropagation(); /* capture phase, before MathJax's own menu */
+  var k = t.dataset.bk === BON ? null : t.dataset.bk;
+  rtSend("bshow", { k: k });
+  showBlock(k);
+}, true);
+
 /* ---------- render ---------- */
 function render(focusSel) {
   renderSide();
   var main = $("#main");
   try { if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([main]); } catch (e) {}
-  main.innerHTML = st.view === "vzory" ? renderVzory() : st.view === "tahak" ? renderTahak() : renderExample();
+  main.innerHTML = st.view === "vzory" ? renderVzory() : st.view === "tahak" ? renderTahak() : st.view === "bloky" ? renderBloky() : renderExample();
   typeset(main);
   if (focusSel) { var el = document.getElementById(focusSel); if (el) el.focus({ preventScroll: true }); }
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
   updateReport();
   save();
   if (FON >= 0 && (st.view !== "ex" || PROBS[st.pi].id !== FON_P)) showFormula(-1); /* a new problem makes it stale */
+  if (st.view !== "bloky") BON = null; /* leaving Bloky makes a shown block stale */
+  markBlock();
   rtAfterRender();
   if (!RT) drawShared();
 }
@@ -385,9 +459,10 @@ function updateReport() {
   if (!a) return;
   var base = "https://github.com/machmar-claude/nai-sbirka/issues/new";
   var where, title;
-  if (st.view === "vzory" || st.view === "tahak") {
-    where = st.view === "vzory" ? "Stránka: Vzory" : "Stránka: Co na tahák";
-    title = st.view === "vzory" ? "[Vzory] " : "[Tahák] ";
+  if (st.view !== "ex") {
+    var pgN = { vzory: ["Vzory", "[Vzory] "], tahak: ["Co na tahák", "[Tahák] "], bloky: ["Bloky", "[Bloky] "] }[st.view];
+    where = "Stránka: " + pgN[0];
+    title = pgN[1];
   } else {
     var p = PROBS[st.pi], mode = curMode(p);
     var step = mode === "learn" ? "Pochopit, krok " + (st.ns + 1) : "Procvičit, krok " + (focusIdx(p) + 1);
@@ -414,7 +489,7 @@ function showPage(v) { st.view = v; st.patFocus = st.patFocus || null; render();
 function routeFromHash() {
   var h = "";
   try { h = decodeURIComponent(location.hash.replace(/^#/, "")); } catch (e) {}
-  if (h === "vzory" || h === "tahak") { showPage(h); return true; }
+  if (h === "vzory" || h === "tahak" || h === "bloky") { showPage(h); return true; }
   var i = PROBS.findIndex(function (p) { return p.m.id === h; });
   if (i >= 0) { showProblem(i); return true; }
   return false;
@@ -710,7 +785,7 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat vzorec</b>: pravý klik na vzorec v listu vzorců</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
+    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat vzorec nebo blok</b>: pravý klik na něj (list vzorců, stránka Bloky)</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
@@ -730,7 +805,7 @@ function applyView(d) {
   RT.need = false;
   RT.applying = true;
   try {
-    if (d.v === "vzory" || d.v === "tahak") { st.view = d.v; history.replaceState(null, "", "#" + d.v); render(); return; }
+    if (d.v === "vzory" || d.v === "tahak" || d.v === "bloky") { st.view = d.v; history.replaceState(null, "", "#" + d.v); render(); return; }
     var i = PROBS.findIndex(function (p) { return p.id === d.id; });
     if (i < 0) return;
     var p = PROBS[i], changed = st.lastId !== p.id;
@@ -829,6 +904,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
   if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
+  if (msg.t === "bshow" && d && (d.k === null || (typeof d.k === "string" && /^[a-z]{1,10}(\.\d{1,2})?$/.test(d.k)))) showBlock(d.k);
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (JSON.stringify(rtCount()) !== before) rtUi();
@@ -924,7 +1000,7 @@ function rtLeave() {
   var R = RT.relay;
   if (R) setTimeout(function () { relaySocks(R).forEach(function (so) { try { so.send(JSON.stringify(["CLOSE", R.sub])); } catch (x) {} }); }, 1000);
   RT.timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
-  RT.room.leave(); RT = null; showFormula(-1);
+  RT.room.leave(); RT = null; showFormula(-1); BON = null; markBlock();
   setUrlRoom(null); drawShared(); rtUi();
 }
 var ptrAt = 0, ptrIn = false;
