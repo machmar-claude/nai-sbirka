@@ -753,7 +753,7 @@ document.addEventListener("wheel", function (e) {
 /* ---------- drawing on the schematic: hover the top-right corner for pen / eraser / colour.
    Strokes are in % of the schematic, so they line up on every screen. Kept for this visit only (not saved). ---------- */
 var INK = {};
-var INKC = ["#e5484d", "#1e88e5", "#2e9e5b", "#ef6c00", "#8e44ad", "#15191e"];
+var INKC = ["#e5484d", "#1e88e5", "#2e9e5b", "#8e44ad", "#ef6c00", "#00979c", "#d6409f", "#15191e"]; /* the room colours (PCOL) + black */
 st.tool = null; st.inkC = INKC[0];
 function inkBar() {
   return '<div class="ink-bar"><button type="button" data-ink="pen" title="Pero" aria-label="Pero" aria-pressed="' + (st.tool === "pen") + '">' +
@@ -1098,6 +1098,9 @@ function rtJoin(code, creator) {
     }, function () {});
     setUrlRoom(code);
     RT.lastKey = JSON.stringify(viewNow());
+    /* your pen starts in your room colour (the one others see for your pointer and pins) */
+    st.inkC = PADC = peerCol(RT.me); padTools();
+    var sw = document.querySelector('#main [data-ink="color"] i'); if (sw) sw.style.background = st.inkC;
     rtUi(); drawShared();
   }).catch(function () { rtMsg("Spojení se nepodařilo spustit (jste online?)."); });
 }
