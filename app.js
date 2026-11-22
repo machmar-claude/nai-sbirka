@@ -500,7 +500,7 @@ document.addEventListener("click", function (ev) {
         setTimeout(function () { if (Math.abs(bd.scrollLeft - to.left) + Math.abs(bd.scrollTop - to.top) > 40) bd.scrollTo(to.left, to.top); }, 600); /* where smooth scrolling doesn't run */
       }
     } else if (d.pad === "color") { PADC = INKC[(INKC.indexOf(PADC) + 1) % INKC.length]; PADT = "pen"; padTools(); }
-    else { PADT = PADT === d.pad ? null : d.pad; padTools(); }
+    else { PADT = d.pad; padTools(); if (PADT === "text") $("#ptext").focus(); } /* one of text / pen / eraser is always on */
     return;
   }
   if (d.ink) {
@@ -1038,23 +1038,24 @@ function showFormula(i) {
 $("#dbody").addEventListener("contextmenu", function (e) {
   var f = e.target.closest && e.target.closest("[data-f]");
   if (!RT || !f) return;
-  e.preventDefault();
+  e.preventDefault(); e.stopPropagation(); /* capture phase: MathJax would otherwise open its own menu on the formula */
   rtSend("fshow", { i: +f.dataset.f });
   showFormula(+f.dataset.f);
-});
+}, true);
 
 /* ---------- scratchpad: type and draw. Text is monospace so a caret position converts to px for "Na aktivní místo".
    Coordinates are px of the canvas; the canvas grows to the content + 150 px so you can scroll further (never scrolls by
    itself). In a room the pad is shared: opening it opens it for everyone, closing is local. Kept for this visit only. ---------- */
-var PAD = { t: "", s: {}, act: null }, PADT = null, PADC = INKC[1], padTimer = null, padAtT = 0, padNow = null;
+var PAD = { t: "", s: {}, act: null }, PADT = "text", PADC = INKC[1], padTimer = null, padAtT = 0, padNow = null;
 var PAD_CW = 8.4, PAD_LH = 20, PAD_X0 = 10, PAD_Y0 = 8; /* 14px monospace: 0.6em per character */
 function padTools() {
   $("#ptools").innerHTML =
+    '<button type="button" data-pad="text" title="Psaní" aria-label="Psaní" aria-pressed="' + (PADT === "text") + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
     '<button type="button" data-pad="pen" title="Pero" aria-label="Pero" aria-pressed="' + (PADT === "pen") + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>' +
     '<button type="button" data-pad="erase" title="Guma: smaže celou čáru, které se dotkne" aria-label="Guma" aria-pressed="' + (PADT === "erase") + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19l-5-5 9.5-9.5a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19zM9 19h11M7.5 10.5l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></button>' +
     '<button type="button" data-pad="color" title="Barva pera" aria-label="Barva pera"><i style="background:' + PADC + '"></i></button>' +
     '<button type="button" class="pact" data-pad="active" title="Posune na místo, kde naposledy psal nebo kreslil někdo jiný"' + (PAD.act ? "" : " disabled") + ">Na aktivní místo</button>";
-  $("#pcanvas").classList.toggle("drawing", !!PADT);
+  $("#pcanvas").classList.toggle("drawing", PADT !== "text");
 }
 function padDraw() { $("#pdone").innerHTML = Object.keys(PAD.s).map(function (k) { var q = PAD.s[k]; return '<path d="' + inkPath(q.p) + '" stroke="' + q.c + '"/>'; }).join(""); }
 /* grow the canvas when content gets within 150 px of its right or bottom edge */
@@ -1129,7 +1130,7 @@ function padErase(e) {
 }
 var pink = $("#pink");
 pink.addEventListener("pointerdown", function (e) {
-  if (!PADT || e.button > 0) return;
+  if (PADT === "text" || e.button > 0) return;
   e.preventDefault();
   try { pink.setPointerCapture(e.pointerId); } catch (x) {}
   if (PADT === "erase") { padNow = { erase: true }; padErase(e); return; }
