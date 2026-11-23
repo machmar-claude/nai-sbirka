@@ -465,7 +465,7 @@ function renderExample() {
     '<figcaption class="legend">' + lg + "</figcaption>" +
     (p.nai && mode !== "exam" ? '<div class="opts">' +
       (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
-      '<label><input type="checkbox" id="clean" ' + (st.clean ? "checked" : "") + "> původní schéma bez anotací</label></div>" : "") + "</figure>" +
+      '<label><input type="checkbox" id="clean" ' + (st.clean ? "checked" : "") + "> Skrýt anotace</label></div>" : "") + "</figure>" +
     '<div class="col">' + ctl + (mode === "learn" ? learnHtml(p) : mode === "exam" ? examHtml(p) : practiceHtml(p)) + "</div></div></div>";
 }
 
