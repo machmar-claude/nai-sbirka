@@ -357,10 +357,10 @@ main { padding-bottom: 56px; }
 .rtpop .msg { min-height: 1.2em; margin: 6px 0 0; }
 .shared { position: absolute; inset: 0; pointer-events: none; line-height: 1.25; }
 .pcur { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent); transition: left .06s linear, top .06s linear; }
-/* a third of the original size in every direction, text included */
-.pin { position: absolute; transform: translate(-50%, calc(-100% - 2.33px)); pointer-events: auto; max-width: 73px; padding: 1px 2.67px; border: 0; border-radius: 2px; background: var(--c); color: #fff; font: 600 4.17px/1.3 var(--font-body); text-align: left; cursor: pointer; box-shadow: 0 .67px 2.67px rgba(0, 0, 0, .25); }
-.pin::after { content: ""; position: absolute; left: 50%; bottom: -2.33px; margin-left: -2px; border: 2.33px solid transparent; border-bottom: 0; border-top-color: var(--c); }
-.pin.dot { width: 5.33px; height: 5.33px; padding: 0; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px #fff, 0 .67px 2.67px rgba(0, 0, 0, .3); }
+/* half the original size in every direction, text included */
+.pin { position: absolute; transform: translate(-50%, calc(-100% - 3.5px)); pointer-events: auto; max-width: 110px; padding: 1.5px 4px; border: 0; border-radius: 3px; background: var(--c); color: #fff; font: 600 6.25px/1.3 var(--font-body); text-align: left; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+.pin::after { content: ""; position: absolute; left: 50%; bottom: -3.5px; margin-left: -3px; border: 3.5px solid transparent; border-bottom: 0; border-top-color: var(--c); }
+.pin.dot { width: 8px; height: 8px; padding: 0; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 0 1.5px #fff, 0 1px 4px rgba(0, 0, 0, .3); }
 .pin.dot::after { display: none; }
 @media print { .shared { display: none; } }
 .rtchip { position: fixed; z-index: 30; right: calc(env(safe-area-inset-right, 0px) + 16px); bottom: calc(env(safe-area-inset-bottom, 0px) + 60px); display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border: 1px solid var(--accent); border-radius: 999px; background: var(--sheet); color: var(--accent); font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 10px rgba(0, 0, 0, .18); }
