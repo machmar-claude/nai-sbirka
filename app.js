@@ -984,15 +984,6 @@ document.addEventListener("keydown", function (ev) {
   }
 });
 window.addEventListener("hashchange", routeFromHash);
-/* wide layout: the steps column scrolls by itself. Scrolling down past its end must not scroll the page (also when the
-   column is too short to scroll, where CSS overscroll-behavior doesn't apply); scrolling up past its top still does,
-   which brings the assignment back. */
-document.addEventListener("wheel", function (e) {
-  var c = e.target.closest && e.target.closest("#main .grid > .col");
-  if (!c || e.deltaY <= 0 || Math.abs(e.deltaX) > Math.abs(e.deltaY) || getComputedStyle(c).overflowY !== "auto") return;
-  if (c.scrollTop + c.clientHeight >= c.scrollHeight - 1) e.preventDefault();
-}, { passive: false });
-
 /* ---------- drawing on the schematic: hover the top-right corner for pen / eraser / colour.
    Strokes are in % of the schematic, so they line up on every screen. Kept for this visit only (not saved). ---------- */
 var INK = {};
