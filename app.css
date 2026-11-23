@@ -394,6 +394,7 @@ main { padding-bottom: 56px; }
 .ptools .pact { width: auto; padding: 0 8px; font: 600 11.5px/1 var(--font-body); color: var(--accent); }
 .ptools .pact:disabled { color: var(--muted); opacity: .5; cursor: default; }
 .dbody.padbody { padding: 0; }
+.padbody.panning, .padbody.panning * { cursor: grabbing !important; }
 .pcanvas { position: relative; min-width: 100%; min-height: 100%; }
 .pcanvas textarea { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 8px 10px; border: 0; outline: none; resize: none; overflow: hidden; white-space: pre; background: transparent; color: var(--ink); font: 14px/20px var(--font-mono); }
 .pcanvas svg { position: absolute; left: 0; top: 0; pointer-events: none; }

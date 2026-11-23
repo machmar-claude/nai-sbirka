@@ -1931,6 +1931,24 @@ function padEnd() {
 }
 pcan.addEventListener("pointerup", padEnd);
 pcan.addEventListener("pointercancel", padEnd);
+/* middle button drags the notes around (scrolls the pad), with any tool on */
+var pbody = $("#pbody"), padPan = null;
+pbody.addEventListener("mousedown", function (e) { if (e.button === 1) e.preventDefault(); }); /* no autoscroll circle, no paste */
+pbody.addEventListener("pointerdown", function (e) {
+  if (e.button !== 1) return;
+  e.preventDefault();
+  padPan = { id: e.pointerId, x: e.clientX, y: e.clientY, l: pbody.scrollLeft, t: pbody.scrollTop };
+  try { pbody.setPointerCapture(e.pointerId); } catch (x) {}
+  pbody.classList.add("panning");
+});
+pbody.addEventListener("pointermove", function (e) {
+  if (!padPan || e.pointerId !== padPan.id) return;
+  pbody.scrollLeft = padPan.l - (e.clientX - padPan.x);
+  pbody.scrollTop = padPan.t - (e.clientY - padPan.y);
+});
+function padPanEnd(e) { if (padPan && e.pointerId === padPan.id) { padPan = null; pbody.classList.remove("panning"); } }
+pbody.addEventListener("pointerup", padPanEnd);
+pbody.addEventListener("pointercancel", padPanEnd);
 padTools();
 
 /* ---------- start ---------- */
