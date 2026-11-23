@@ -136,7 +136,7 @@ function focusIdx(p) { var n = p.m.steps.length; if (st.pf != null && st.pf < n 
 function pinsHtml(p) {
   var h = "", zp = !!pg(p).zkp;
   for (var i = 0; i < p.m.steps.length; i++) h += '<i class="' + (solved(p, i) ? "on" : "") + '"></i>';
-  /* the last mark is Zkouška: a diamond (a milestone) until every result in it was right once, then a tick */
+  /* the last mark is Zkouška: a diamond (a milestone), filled once every result in it was right */
   h += '<i class="zk' + (zp ? " on" : "") + '"></i>';
   return '<span class="pins" aria-label="' + doneCount(p) + " z " + p.m.steps.length + " kroků, zkouška " + (zp ? "splněna" : "nesplněna") + '">' + h + "</span>";
 }

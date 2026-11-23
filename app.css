@@ -61,9 +61,9 @@ sub { font-size: .72em; line-height: 0; }
 .pins { display: inline-flex; gap: 3px; }
 .pins i { width: 7px; height: 7px; border: 1.5px solid var(--muted); display: block; }
 .pins i.on { background: var(--accent); border-color: var(--accent); border-radius: 50%; }
-/* Zkouška: a diamond of the same size, then a tick once passed */
+/* Zkouška: a diamond of the same size, filled in its own colour once passed */
 .pins i.zk { width: 5px; height: 5px; margin: 0 1.5px; align-self: center; transform: rotate(45deg); }
-.pins i.zk.on { width: 3.5px; height: 7px; margin: -1px 2.5px 0; background: none; border-width: 0 2px 2px 0; border-color: var(--ok); border-radius: 0; }
+.pins i.zk.on { background: var(--muted); border-color: var(--muted); border-radius: 0; }
 .known { color: var(--ok); font-weight: 700; }
 .only { font-style: italic; }
 .list { flex: 1 0 auto; }
