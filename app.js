@@ -34,7 +34,7 @@ function snapshot() {
   var prog = {};
   Object.keys(st.prog).forEach(function (k) {
     var s = st.prog[k];
-    var any = s.plot || s.zk || [s.ok, s.rev, s.hint, s.val, s.fb].some(function (a) { return a.some(function (x) { return !!x; }); });
+    var any = s.plot || s.zk || s.zkp || [s.ok, s.rev, s.hint, s.val, s.fb].some(function (a) { return a.some(function (x) { return !!x; }); });
     if (any) prog[k] = s;
   });
   var known = {};
@@ -47,7 +47,7 @@ function save() {
 /* sanitise one saved/imported progress record against the real number of steps */
 function cleanProg(p, src) {
   if (!src || typeof src !== "object") return null;
-  var n = p.m.steps.length, o = { ok: [], rev: [], hint: [], val: [], fb: [], plot: !!src.plot, zk: typeof src.zk === "string" ? src.zk.slice(0, 4000) : "" };
+  var n = p.m.steps.length, o = { ok: [], rev: [], hint: [], val: [], fb: [], plot: !!src.plot, zk: typeof src.zk === "string" ? src.zk.slice(0, 4000) : "", zkp: src.zkp === true };
   function at(a, i) { return Array.isArray(a) ? a[i] : undefined; }
   for (var i = 0; i < n; i++) {
     o.ok[i] = at(src.ok, i) === true; o.rev[i] = at(src.rev, i) === true; o.hint[i] = at(src.hint, i) === true;
@@ -64,6 +64,7 @@ function mergeProg(dst, c, n) {
   }
   dst.plot = !!dst.plot || c.plot;
   if (!dst.zk) dst.zk = c.zk;
+  dst.zkp = !!dst.zkp || c.zkp;
 }
 function mergeState(src) {
   var changed = 0;
@@ -132,7 +133,13 @@ function solved(p, i) { var s = pg(p); return !!(s.ok[i] || s.rev[i]); }
 function frontier(p) { for (var i = 0; i < p.m.steps.length; i++) if (!solved(p, i)) return i; return p.m.steps.length; }
 function doneCount(p) { var c = 0; for (var i = 0; i < p.m.steps.length; i++) if (solved(p, i)) c++; return c; }
 function focusIdx(p) { var n = p.m.steps.length; if (st.pf != null && st.pf < n && st.pf <= frontier(p)) return st.pf; return Math.min(frontier(p), n - 1); }
-function pinsHtml(p) { var h = ""; for (var i = 0; i < p.m.steps.length; i++) h += '<i class="' + (solved(p, i) ? "on" : "") + '"></i>'; return '<span class="pins" aria-label="' + doneCount(p) + " z " + p.m.steps.length + ' kroků">' + h + "</span>"; }
+function pinsHtml(p) {
+  var h = "", zp = !!pg(p).zkp;
+  for (var i = 0; i < p.m.steps.length; i++) h += '<i class="' + (solved(p, i) ? "on" : "") + '"></i>';
+  /* the last mark is Zkouška: a diamond (a milestone) until every result in it was right once, then a tick */
+  h += '<i class="zk' + (zp ? " on" : "") + '"></i>';
+  return '<span class="pins" aria-label="' + doneCount(p) + " z " + p.m.steps.length + " kroků, zkouška " + (zp ? "splněna" : "nesplněna") + '">' + h + "</span>";
+}
 function curMode(p) { return st.mode === "exam" ? "exam" : p.nai ? st.mode : "practice"; }
 function nsClamp(p) { if (p.nai) st.ns = Math.max(0, Math.min(st.ns, p.nai.steps.length - 1)); else st.ns = 0; }
 function typeset(el) {
@@ -696,7 +703,8 @@ function examHtml(p) {
   function name(stp) { return fmt(String(stp.sym || "").split("|")[0]); }
   function pill(cls) { return function (x) { return '<span class="zpill ' + cls + '">' + name(x.s) + " = " + esc(x.v) + "</span>"; }; }
   var h = '<div class="exam"><p class="extask">' + fmt(p.m.task) + "</p>" +
-    '<textarea id="zkin" rows="9" spellcheck="false" autocomplete="off" aria-label="Tvoje výsledky, jeden na řádek" placeholder="R2 = 35 kΩ&#10;T = 25 ns">' + esc(s.zk || "") + "</textarea>" +
+    '<div class="zkwrap"><textarea id="zkin" rows="9" spellcheck="false" autocomplete="off" aria-label="Tvoje výsledky, jeden na řádek" placeholder="R = x Ω">' + esc(zkText(p)) + '</textarea><div id="zkcarets" class="zcarets" aria-hidden="true"></div></div>' +
+    (RT ? '<p class="zskip">V místnosti je pole společné. Tvůj vlastní text se vrátí, až místnost opustíš.</p>' : "") +
     '<div class="row-actions"><button class="btn primary" type="button" data-zk="check">Zkontrolovat</button>' +
     '<button class="btn" type="button" data-zk="sol" aria-pressed="' + !!s.zks + '">' + (s.zks ? "Skrýt výsledky" : "Ukázat výsledky") + "</button></div>";
   if (s.zkc != null) {
@@ -711,6 +719,99 @@ function examHtml(p) {
   }).join("") + "</tbody></table>";
   return h + "</div>";
 }
+
+/* ---------- Zkouška in a room: one shared box per problem (your own text comes back when you leave). Every keystroke
+   goes out as an edit {at, del, ins} plus your caret, so the others see it as you type; their carets are thin lines in
+   their colour. Edits made at the same moment can leave the copies slightly different, so 1 s after you stop typing
+   the whole text goes out too, and the others take it if they are not typing (two people stopping together: the lower
+   id wins). ---------- */
+var ZKT = 0, zkQT = null, zkCT = 0, zkLastC = null;
+function zkR() { RT.zcur = RT.zcur || {}; return RT.zk || (RT.zk = {}); }
+function zkText(p) { return RT ? zkR()[p.id] || "" : pg(p).zk || ""; }
+function zkLocal(ta) {
+  var id = PROBS[st.pi].id, old = zkR()[id] || "", nv = ta.value.slice(0, 4000), c = ta.selectionStart, a = 0;
+  while (a < old.length && a < nv.length && old[a] === nv[a]) a++;
+  a = Math.min(a, Math.max(0, c - Math.max(0, nv.length - old.length))); /* "aa" → "aaa" with the caret at 1 is an insert at 0 */
+  var e1 = old.length, e2 = nv.length;
+  while (e1 > a && e2 > a && old[e1 - 1] === nv[e2 - 1]) { e1--; e2--; }
+  zkR()[id] = nv; ZKT = Date.now(); zkLastC = c;
+  rtSend("zkop", { id: id, at: a, del: e1 - a, ins: nv.slice(a, e2), c: c });
+  clearTimeout(zkQT);
+  zkQT = setTimeout(function () { /* with the caret again: one sent while someone else typed can be a few characters off */
+    var b = $("#zkin");
+    if (RT) rtSend("zkt", { id: id, v: zkR()[id] || "", c: b && document.activeElement === b ? b.selectionStart : -1 });
+  }, 1000);
+}
+function zkCaret(ta, gone) {
+  if (!RT) return;
+  var c = gone ? -1 : ta.selectionStart;
+  if (c === zkLastC) return;
+  zkLastC = c;
+  rtSend("zkc", { id: PROBS[st.pi].id, c: c });
+}
+/* put the shared text into the box without moving your own caret off the character it was at */
+function zkShow(id, shift) {
+  var ta = $("#zkin");
+  if (ta && PROBS[st.pi].id === id) {
+    var a = ta.selectionStart, b = ta.selectionEnd, top = ta.scrollTop, v = zkR()[id] || "";
+    if (ta.value !== v) {
+      ta.value = v;
+      if (document.activeElement === ta) ta.setSelectionRange(Math.min(shift ? shift(a) : a, v.length), Math.min(shift ? shift(b) : b, v.length));
+      ta.scrollTop = top;
+    }
+  }
+  zkCarets();
+}
+function zkRecv(t, d, f) {
+  if (!d || typeof d.id !== "string" || !PROBS.some(function (p) { return p.id === d.id; })) return;
+  var R = zkR(), cur = R[d.id] || "";
+  if (t === "zkop") {
+    if (!(Number.isInteger(d.at) && Number.isInteger(d.del) && d.at >= 0 && d.del >= 0 && typeof d.ins === "string" && d.ins.length <= 4000)) return;
+    var at = Math.min(d.at, cur.length), del = Math.min(d.del, cur.length - at), n = d.ins.length;
+    var shift = function (x) { return x <= at ? x : x >= at + del ? x - del + n : at + n; };
+    R[d.id] = (cur.slice(0, at) + d.ins + cur.slice(at + del)).slice(0, 4000);
+    Object.keys(RT.zcur).forEach(function (k) { var z = RT.zcur[k]; if (z.id === d.id) z.c = shift(z.c); });
+    if (Number.isInteger(d.c) && d.c >= 0) RT.zcur[f] = { id: d.id, c: d.c };
+    zkShow(d.id, shift);
+  }
+  if (t === "zkt" && typeof d.v === "string") {
+    var idle = Date.now() - ZKT;
+    if (d.v !== cur && (idle > 3000 || (idle > 1000 && f < RT.me))) R[d.id] = d.v.slice(0, 4000);
+    if (Number.isInteger(d.c)) { if (d.c < 0) delete RT.zcur[f]; else RT.zcur[f] = { id: d.id, c: d.c }; }
+    zkShow(d.id, null);
+  }
+  if (t === "zkc" && Number.isInteger(d.c)) { if (d.c < 0) delete RT.zcur[f]; else RT.zcur[f] = { id: d.id, c: d.c }; zkCarets(); }
+}
+var zkMirror = null;
+/* the others' carets: a copy of the box (same font, width and wrapping) tells where character c sits */
+function zkCarets() {
+  var ta = $("#zkin"), lay = $("#zkcarets");
+  if (!ta || !lay) return;
+  lay.innerHTML = "";
+  if (!RT || !RT.zcur) return;
+  var id = PROBS[st.pi].id, cs = getComputedStyle(ta), v = ta.value;
+  if (!zkMirror) { zkMirror = document.createElement("div"); zkMirror.setAttribute("aria-hidden", "true"); document.body.appendChild(zkMirror); }
+  var m = zkMirror.style;
+  m.cssText = "position:absolute;visibility:hidden;left:-9999px;top:0;white-space:pre-wrap;overflow-wrap:break-word;box-sizing:content-box;border:0";
+  ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "tabSize", "paddingLeft", "paddingRight", "paddingTop"].forEach(function (k) { m[k] = cs[k]; });
+  m.width = (ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) + "px";
+  var lh = parseFloat(cs.lineHeight) || 20, bl = parseFloat(cs.borderLeftWidth) || 0, bt = parseFloat(cs.borderTopWidth) || 0;
+  Object.keys(RT.zcur).forEach(function (pid) {
+    var z = RT.zcur[pid], mem = RT.members[pid];
+    if (z.id !== id || !mem || !rtAlive(mem)) return;
+    zkMirror.textContent = v.slice(0, Math.min(z.c, v.length));
+    var mark = document.createElement("span"); mark.textContent = "​"; zkMirror.appendChild(mark);
+    var i = document.createElement("i");
+    i.className = "zcaret"; i.style.setProperty("--c", peerCol(pid));
+    i.style.left = (bl + mark.offsetLeft - ta.scrollLeft) + "px"; i.style.top = (bt + mark.offsetTop - ta.scrollTop) + "px"; i.style.height = lh + "px";
+    lay.appendChild(i);
+  });
+}
+document.addEventListener("scroll", function (e) { if (e.target.id === "zkin") zkCarets(); }, true);
+document.addEventListener("keyup", function (e) { if (e.target.id === "zkin") zkCaret(e.target); });
+document.addEventListener("mouseup", function (e) { if (e.target.id === "zkin") zkCaret(e.target); });
+document.addEventListener("focusin", function (e) { if (e.target.id === "zkin") zkCaret(e.target); });
+document.addEventListener("focusout", function (e) { if (e.target.id === "zkin") zkCaret(e.target, true); });
 
 /* ---------- export / import / reset ---------- */
 function msg(t, err) { var m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); }
@@ -814,7 +915,12 @@ document.addEventListener("click", function (ev) {
   }
   if (d.zk) {
     var zs = pg(p), box = $("#zkin");
-    if (d.zk === "check") { if (box) zs.zk = box.value; zs.zkc = zs.zk; } else zs.zks = !zs.zks;
+    if (d.zk === "check") {
+      if (box && !RT) zs.zk = box.value;
+      zs.zkc = box ? box.value : zkText(p);
+      var zr = zkGrade(p, zs.zkc);
+      if (zr.n && zr.good === zr.n) zs.zkp = true;
+    } else zs.zks = !zs.zks;
     render(); return;
   }
   if (d.act) {
@@ -841,7 +947,7 @@ document.addEventListener("change", function (ev) {
 document.addEventListener("input", function (ev) {
   var tg = ev.target;
   if (tg.id === "q") { st.q = tg.value; renderSide(); return; }
-  if (tg.id === "zkin") { pg(PROBS[st.pi]).zk = tg.value; save(); return; }
+  if (tg.id === "zkin") { if (RT) zkLocal(tg); else { pg(PROBS[st.pi]).zk = tg.value; save(); } return; }
   var i = tg.dataset && tg.dataset.inp;
   if (i != null) { var s = pg(PROBS[st.pi]); s.val[+i] = tg.value; s.fb[+i] = null; save(); }
 });
@@ -1142,7 +1248,7 @@ function rtAfterRender() {
   if (!RT) return;
   var v = viewNow(), k = JSON.stringify(v);
   if (k !== RT.lastKey) { RT.lastKey = k; if (!RT.applying) rtSend("view", v); }
-  drawShared();
+  drawShared(); zkCarets();
 }
 function applyView(d) {
   if (!RT || !RT.follow || !d || typeof d !== "object") return;
@@ -1237,9 +1343,10 @@ function rtRecv(msg, pid) {
   if (pid) m.p2p = pid; else m.seen = Date.now();
   var d = msg.d;
   if (msg.t === "bye") { delete RT.members[msg.f]; delete RT.cur[msg.f]; isNew = false; drawShared(); }
-  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList(), pad: padState(), zoom: ZOOM }, msg.f);
+  if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList(), pad: padState(), zoom: ZOOM, zk: zkR() }, msg.f);
   /* a newcomer asks for the current view once; whoever has been in the room longer answers, never the newcomer */
-  if (msg.t === "hi" && d && typeof d === "object") { if (d.zoom && typeof d.zoom === "object") Object.keys(d.zoom).slice(0, 200).forEach(function (id) { var w = d.zoom[id]; if (w) zMerge({ id: id, z: w.z, x: w.x, y: w.y }); }); mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
+  if (msg.t === "hi" && d && typeof d === "object") { if (d.zoom && typeof d.zoom === "object") Object.keys(d.zoom).slice(0, 200).forEach(function (id) { var w = d.zoom[id]; if (w) zMerge({ id: id, z: w.z, x: w.x, y: w.y }); }); mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad);
+    if (d.zk && typeof d.zk === "object") Object.keys(d.zk).slice(0, 200).forEach(function (id) { var v = d.zk[id]; if (typeof v === "string" && !zkR()[id] && PROBS.some(function (p) { return p.id === id; })) { zkR()[id] = v.slice(0, 4000); zkShow(id, null); } }); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
   if (msg.t === "view") applyView(d);
   if (msg.t === "ptr" && d && typeof d.id === "string") {
     var x = pct(d.x), y = pct(d.y);
@@ -1255,6 +1362,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (msg.t === "zoom") zMerge(d);
+  if (msg.t === "zkop" || msg.t === "zkt" || msg.t === "zkc") zkRecv(msg.t, d, msg.f);
   if (msg.t === "hl" && d && typeof d.pg === "string" && /^(ex:[\w.\-]{1,16}|vzory|bloky|tahak)$/.test(d.pg) && (d.k === null || (typeof d.k === "string" && /^[\w.\-]{1,40}$/.test(d.k)))) showHl(d);
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
@@ -1344,6 +1452,7 @@ function rtJoin(code, creator) {
     st.inkC = PADC = peerCol(RT.me); padTools();
     var sw = document.querySelector('#main [data-ink="color"] i'); if (sw) sw.style.background = st.inkC;
     rtUi(); drawShared();
+    if (st.view === "ex" && curMode(PROBS[st.pi]) === "exam") render(); /* the box shows the room's shared text */
   }).catch(function () { rtMsg("Spojení se nepodařilo spustit (jste online?)."); });
 }
 function rtLeave() {
@@ -1354,6 +1463,7 @@ function rtLeave() {
   RT.timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
   RT.room.leave(); RT = null; showFormula(-1); BON = null; markBlock(); HON = null; markHl();
   setUrlRoom(null); drawShared(); rtUi();
+  if (st.view === "ex" && curMode(PROBS[st.pi]) === "exam") render(); /* your own text back in the box */
 }
 var ptrAt = 0, ptrIn = false;
 document.addEventListener("pointermove", function (e) {
