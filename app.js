@@ -1334,7 +1334,35 @@ document.addEventListener("pointercancel", inkEnd);
 var RT = null;
 var TRYSTERO = "https://cdn.jsdelivr.net/npm/trystero@0.26.0/+esm";
 var PCOL = ["#e5484d", "#1e88e5", "#2e9e5b", "#8e44ad", "#ef6c00", "#00979c", "#d6409f"];
-function peerCol(id) { var h = 0; id = String(id); for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return PCOL[Math.abs(h) % PCOL.length]; }
+function hashCol(id) { var h = 0; id = String(id); for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return Math.abs(h) % PCOL.length; }
+/* colours must differ, so a hash alone isn't enough: in the order people joined (then id), each takes their own hash
+   colour unless someone earlier has it, else the first free one. Everyone knows the same join times (sent in "hi"),
+   so all agree, and a newcomer never changes anyone else's colour. Past 7 people colours repeat. */
+function peerCol(id) {
+  id = String(id);
+  if (!RT) return PCOL[hashCol(id)];
+  var ids = Object.keys(RT.members).concat(RT.me), taken = {}, mine = null;
+  if (ids.indexOf(id) < 0) return PCOL[hashCol(id)]; /* someone who already left (an old pin) */
+  var since = function (k) { return k === RT.me ? RT.since : RT.members[k].since || Infinity; };
+  ids.sort(function (a, b) { return since(a) - since(b) || (a < b ? -1 : 1); });
+  ids.forEach(function (k) {
+    if (Object.keys(taken).length >= PCOL.length) taken = {}; /* all used: start over */
+    var c = hashCol(k);
+    if (taken[c]) for (var j = 0; j < PCOL.length; j++) if (!taken[j]) { c = j; break; }
+    taken[c] = true;
+    if (k === id) mine = c;
+  });
+  return PCOL[mine];
+}
+/* my colour can change once I learn who was here first: move my pen to it, unless I picked another pen colour */
+function rtMyCol() {
+  var c = peerCol(RT.me);
+  if (c === RT.myCol) return;
+  if (st.inkC === RT.myCol) st.inkC = c;
+  if (PADC === RT.myCol) PADC = c;
+  RT.myCol = c; padTools();
+  var sw = document.querySelector('#main [data-ink="color"] i'); if (sw) sw.style.background = st.inkC;
+}
 function newCode() { var a = "abcdefghjkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(6)), s = ""; for (var i = 0; i < 6; i++) s += a[r[i] % a.length]; return s; }
 function setUrlRoom(code) { var u = new URL(location.href); if (code) u.searchParams.set("room", code); else u.searchParams.delete("room"); history.replaceState(null, "", u.href); }
 function rtMsg(t) { var m = $("#rtmsg"); if (m) m.textContent = t; }
@@ -1415,6 +1443,7 @@ function mergePins(list) {
   });
 }
 function drawShared() {
+  if (RT) rtMyCol();
   var pap = document.querySelector("#main .zoom"), old = pap && pap.querySelector(".shared");
   if (old) old.remove();
   if (!pap || st.view !== "ex") return;
@@ -1469,7 +1498,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "bye") { delete RT.members[msg.f]; delete RT.cur[msg.f]; isNew = false; drawShared(); }
   if (isNew) rtSend("hi", { need: RT.need, since: RT.since, pins: pinList(), ink: inkList(), pad: padState(), zoom: ZOOM, zk: zkR() }, msg.f);
   /* a newcomer asks for the current view once; whoever has been in the room longer answers, never the newcomer */
-  if (msg.t === "hi" && d && typeof d === "object") { if (d.zoom && typeof d.zoom === "object") Object.keys(d.zoom).slice(0, 200).forEach(function (id) { var w = d.zoom[id]; if (w) zMerge({ id: id, z: w.z, x: w.x, y: w.y }); }); mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad);
+  if (msg.t === "hi" && d && typeof d === "object") { if (isFinite(d.since) && d.since > 0) m.since = +d.since; /* for peerCol */ if (d.zoom && typeof d.zoom === "object") Object.keys(d.zoom).slice(0, 200).forEach(function (id) { var w = d.zoom[id]; if (w) zMerge({ id: id, z: w.z, x: w.x, y: w.y }); }); mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad);
     if (d.zk && typeof d.zk === "object") Object.keys(d.zk).slice(0, 200).forEach(function (id) { var v = d.zk[id]; if (typeof v === "string" && !zkR()[id] && PROBS.some(function (p) { return p.id === id; })) { zkR()[id] = v.slice(0, 4000); zkShow(id, null); } }); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
   if (msg.t === "view") applyView(d);
   if (msg.t === "goto" && d && typeof d.id === "string") rtGoto(d.id);
@@ -1574,7 +1603,7 @@ function rtJoin(code, creator) {
     setUrlRoom(code);
     RT.lastKey = JSON.stringify(viewNow());
     /* your pen starts in your room colour (the one others see for your pointer and pins) */
-    st.inkC = PADC = peerCol(RT.me); padTools();
+    st.inkC = PADC = RT.myCol = peerCol(RT.me); padTools();
     var sw = document.querySelector('#main [data-ink="color"] i'); if (sw) sw.style.background = st.inkC;
     rtUi(); drawShared();
     if (st.view === "ex" && curMode(PROBS[st.pi]) === "exam") render(); /* the box shows the room's shared text */
