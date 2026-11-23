@@ -492,6 +492,10 @@ function showHl(d) {
   if (HON && HON.pg.slice(0, 3) !== "ex:" && st.view !== HON.pg) { /* a line on a page opens that page, like a pattern or block does */
     st.view = HON.pg; st.patFocus = null; history.replaceState(null, "", "#" + HON.pg); window.scrollTo(0, 0); render();
   }
+  if (HON && /^zr\d+$/.test(HON.k) && st.view === "ex" && HON.pg === hlPage()) { /* a Zkouška result row opens Ukázat výsledky */
+    var zs = pg(PROBS[st.pi]);
+    if (curMode(PROBS[st.pi]) !== "exam" || !zs.zks) { st.mode = "exam"; zs.zks = true; render(); }
+  }
   var el = markHl();
   if (el) el.scrollIntoView({ block: "nearest" });
 }
@@ -715,8 +719,8 @@ function examHtml(p) {
       (r.bad.length ? '<div class="zpills">' + r.bad.map(pill("bad")).join("") + "</div>" : "") +
       (r.skip.length ? '<p class="zskip">Nehodnoceno: ' + r.skip.map(esc).join(" · ") + "</p>" : "") + "</div>";
   }
-  if (s.zks) h += '<table class="ztab"><tbody>' + p.m.steps.filter(function (x) { return x.ans != null; }).map(function (x) {
-    return "<tr><td>" + name(x) + "</td><td>" + String(x.ans).replace(".", ",") + (x.unit && x.unit !== "–" ? " " + esc(x.unit) : "") + "</td></tr>";
+  if (s.zks) h += '<table class="ztab"><tbody>' + p.m.steps.map(function (x, i) {
+    return x.ans == null ? "" : '<tr data-hl="zr' + i + '"><td>' + name(x) + "</td><td>" + String(x.ans).replace(".", ",") + (x.unit && x.unit !== "–" ? " " + esc(x.unit) : "") + "</td></tr>";
   }).join("") + "</tbody></table>";
   return h + "</div>";
 }
@@ -782,6 +786,12 @@ function zkRecv(t, d, f) {
     zkShow(d.id, null);
   }
   if (t === "zkc" && Number.isInteger(d.c)) { if (d.c < 0) delete RT.zcur[f]; else RT.zcur[f] = { id: d.id, c: d.c }; zkCarets(); }
+  if (t === "zkchk" && typeof d.v === "string") { /* someone pressed Zkontrolovat: grade the text they checked */
+    var cp = PROBS.find(function (x) { return x.id === d.id; }), cs = pg(cp), g;
+    cs.zkc = d.v.slice(0, 4000); g = zkGrade(cp, cs.zkc);
+    if (g.n && g.good === g.n) cs.zkp = true;
+    if (st.view === "ex" && PROBS[st.pi].id === d.id) render(); else { renderSide(); save(); }
+  }
 }
 var zkMirror = null;
 /* the others' carets: a copy of the box (same font, width and wrapping) tells where character c sits */
@@ -921,6 +931,7 @@ document.addEventListener("click", function (ev) {
       zs.zkc = box ? box.value : zkText(p);
       var zr = zkGrade(p, zs.zkc);
       if (zr.n && zr.good === zr.n) zs.zkp = true;
+      if (RT) rtSend("zkchk", { id: p.id, v: zs.zkc }); /* the box is shared, so the check is too; Ukázat výsledky stays yours */
     } else zs.zks = !zs.zks;
     render(); return;
   }
@@ -1226,7 +1237,7 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec (v listu, v krocích i na stránkách), zadanou hodnotu, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
+    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec (v listu, v krocích i na stránkách), zadanou hodnotu, řádek výsledků ve zkoušce, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
@@ -1354,7 +1365,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (msg.t === "zoom") zMerge(d);
-  if (msg.t === "zkop" || msg.t === "zkt" || msg.t === "zkc") zkRecv(msg.t, d, msg.f);
+  if (msg.t === "zkop" || msg.t === "zkt" || msg.t === "zkc" || msg.t === "zkchk") zkRecv(msg.t, d, msg.f);
   if (msg.t === "hl" && d && typeof d.pg === "string" && /^(ex:[\w.\-]{1,16}|vzory|bloky|tahak)$/.test(d.pg) && (d.k === null || (typeof d.k === "string" && /^[\w.\-]{1,40}$/.test(d.k)))) showHl(d);
   if (JSON.stringify(rtCount()) !== before) rtUi();
 }
