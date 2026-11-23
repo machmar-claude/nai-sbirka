@@ -853,14 +853,25 @@ function examHtml(p) {
 var ZKT = 0, zkQT = null, zkCT = 0, zkLastC = null;
 function zkR() { RT.zcur = RT.zcur || {}; return RT.zk || (RT.zk = {}); }
 function zkText(p) { return RT ? zkR()[p.id] || "" : pg(p).zk || ""; }
-function zkLocal(ta) {
-  var id = PROBS[st.pi].id, old = zkR()[id] || "", nv = ta.value.slice(0, 4000), c = ta.selectionStart, a = 0;
+/* a shared-text edit {at, del, ins}: what one keystroke changed (the Zkouška box and the Poznámky pad), and applying
+   someone's edit to my copy, with shift() moving any caret past it */
+function textOp(old, nv, c) {
+  var a = 0;
   while (a < old.length && a < nv.length && old[a] === nv[a]) a++;
   a = Math.min(a, Math.max(0, c - Math.max(0, nv.length - old.length))); /* "aa" → "aaa" with the caret at 1 is an insert at 0 */
   var e1 = old.length, e2 = nv.length;
   while (e1 > a && e2 > a && old[e1 - 1] === nv[e2 - 1]) { e1--; e2--; }
+  return { at: a, del: e1 - a, ins: nv.slice(a, e2) };
+}
+function textApply(cur, d, max) {
+  if (!(Number.isInteger(d.at) && Number.isInteger(d.del) && d.at >= 0 && d.del >= 0 && typeof d.ins === "string" && d.ins.length <= max)) return null;
+  var at = Math.min(d.at, cur.length), del = Math.min(d.del, cur.length - at), n = d.ins.length;
+  return { v: (cur.slice(0, at) + d.ins + cur.slice(at + del)).slice(0, max), shift: function (x) { return x <= at ? x : x >= at + del ? x - del + n : at + n; } };
+}
+function zkLocal(ta) {
+  var id = PROBS[st.pi].id, old = zkR()[id] || "", nv = ta.value.slice(0, 4000), c = ta.selectionStart, o = textOp(old, nv, c);
   zkR()[id] = nv; ZKT = Date.now(); zkLastC = c;
-  rtSend("zkop", { id: id, at: a, del: e1 - a, ins: nv.slice(a, e2), c: c });
+  rtSend("zkop", { id: id, at: o.at, del: o.del, ins: o.ins, c: c });
   clearTimeout(zkQT);
   zkQT = setTimeout(function () { /* with the caret again: one sent while someone else typed can be a few characters off */
     var b = $("#zkin");
@@ -891,10 +902,9 @@ function zkRecv(t, d, f) {
   if (!d || typeof d.id !== "string" || !PROBS.some(function (p) { return p.id === d.id; })) return;
   var R = zkR(), cur = R[d.id] || "";
   if (t === "zkop") {
-    if (!(Number.isInteger(d.at) && Number.isInteger(d.del) && d.at >= 0 && d.del >= 0 && typeof d.ins === "string" && d.ins.length <= 4000)) return;
-    var at = Math.min(d.at, cur.length), del = Math.min(d.del, cur.length - at), n = d.ins.length;
-    var shift = function (x) { return x <= at ? x : x >= at + del ? x - del + n : at + n; };
-    R[d.id] = (cur.slice(0, at) + d.ins + cur.slice(at + del)).slice(0, 4000);
+    var op = textApply(cur, d, 4000), shift = op && op.shift;
+    if (!op) return;
+    R[d.id] = op.v;
     Object.keys(RT.zcur).forEach(function (k) { var z = RT.zcur[k]; if (z.id === d.id) z.c = shift(z.c); });
     if (Number.isInteger(d.c) && d.c >= 0) RT.zcur[f] = { id: d.id, c: d.c };
     zkShow(d.id, shift);
@@ -943,6 +953,8 @@ document.addEventListener("keyup", function (e) { if (e.target.id === "zkin") zk
 document.addEventListener("mouseup", function (e) { if (e.target.id === "zkin") zkCaret(e.target); });
 document.addEventListener("focusin", function (e) { if (e.target.id === "zkin") zkCaret(e.target); });
 document.addEventListener("focusout", function (e) { if (e.target.id === "zkin") zkCaret(e.target, true); });
+["keyup", "mouseup", "focusin"].forEach(function (ev) { $("#ptext").addEventListener(ev, function () { padCaret(this); }); });
+$("#ptext").addEventListener("focusout", function () { padCaret(this, true); });
 
 /* ---------- export / import / reset ---------- */
 function msg(t, err) { var m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); }
@@ -1177,7 +1189,7 @@ function doStep(key, a, back) {
   if (a.ink) { if (present) { INK[a.q.k] = a.q; if (RT) rtSend("draw", a.q); } else if (INK[a.q.k]) { delete INK[a.q.k]; if (RT) rtSend("erase", a.q.k); } }
   if (a.pin && RT) { if (present) { RT.pins[a.q.k] = a.q; rtSend("pin", a.q); } else if (RT.pins[a.q.k]) { delete RT.pins[a.q.k]; rtSend("unpin", a.q.k); } }
   if (a.pad) { if (present) { PAD.s[a.q.k] = a.q; if (RT) rtSend("padd", a.q); } else if (PAD.s[a.q.k]) { delete PAD.s[a.q.k]; if (RT) rtSend("pade", { k: a.q.k }); } }
-  if (a.text != null) { var cur = PAD.t; clearTimeout(padBurst); padBurst = null; padSetText(a.text); if (RT) rtSend("padt", { v: PAD.t }); a = { text: cur }; }
+  if (a.text != null) { var cur = PAD.t; clearTimeout(padBurst); padBurst = null; padSetText(a.text); if (RT) { var uo = textOp(cur, PAD.t, PAD.t.length); rtSend("padop", { at: uo.at, del: uo.del, ins: uo.ins }); rtSend("padt", { v: PAD.t }); } a = { text: cur }; }
   if (key === "pad") { padDraw(); padGrow(); } else drawShared();
   return a;
 }
@@ -1444,6 +1456,7 @@ function mergePins(list) {
 }
 function drawShared() {
   if (RT) rtMyCol();
+  padCarets(); /* someone left or I left the room */
   var pap = document.querySelector("#main .zoom"), old = pap && pap.querySelector(".shared");
   if (old) old.remove();
   if (!pap || st.view !== "ex") return;
@@ -1510,7 +1523,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "pin" && d && typeof d === "object") { d.by = msg.f; mergePins([d]); drawShared(); }
   if (msg.t === "unpin" && typeof d === "string" && RT.pins[d]) { delete RT.pins[d]; drawShared(); }
   if (msg.t === "draw") { mergeInk([d]); drawShared(); }
-  if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d);
+  if (msg.t.slice(0, 3) === "pad") padRecv(msg.t, d, msg.f);
   if (msg.t === "pshow" && d && (d.k === null || (typeof d.k === "string" && PATTERNS[d.k]))) showPat(d.k);
   if (msg.t === "bshow" && d && (d.k === null || (typeof d.k === "string" && /^[a-z]{1,10}(\.\d{1,2})?$/.test(d.k)))) showBlock(d.k);
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
@@ -1790,18 +1803,62 @@ function padMerge(list) {
     if (ok) PAD.s[q.k] = { k: q.k, c: q.c, p: q.p.map(function (a) { return [a[0], a[1]]; }) };
   });
 }
-function padSetText(v) {
+function padSetText(v, shift) {
   if (typeof v !== "string") return;
   PAD.t = v.slice(0, 20000);
   var ta = $("#ptext"), focused = document.activeElement === ta, a = ta.selectionStart, b = ta.selectionEnd;
-  ta.value = PAD.t;
-  if (focused) ta.setSelectionRange(Math.min(a, PAD.t.length), Math.min(b, PAD.t.length));
+  if (ta.value !== PAD.t) {
+    ta.value = PAD.t;
+    if (focused) ta.setSelectionRange(Math.min(shift ? shift(a) : a, PAD.t.length), Math.min(shift ? shift(b) : b, PAD.t.length));
+  }
+  padCarets();
 }
+/* in a room the text is shared like the Zkouška box: every keystroke goes out as an edit with your caret, the others'
+   carets are thin lines in their colour, and the whole text follows once typing pauses (two people stopping together:
+   the lower id wins). The pad is a fixed monospace grid without wrapping, so a caret is just line × LH, column × CW. */
+var padEditT = 0, padLastC = null;
+function padXY(c) { var b = PAD.t.slice(0, c).split("\n"); return [Math.round(PAD_X0 + b[b.length - 1].length * PAD_CW), Math.round(PAD_Y0 + (b.length - 1) * PAD_LH)]; }
+function padCaret(ta, gone) {
+  if (!RT) return;
+  var c = gone ? -1 : ta.selectionStart;
+  if (c === padLastC) return;
+  padLastC = c;
+  rtSend("padc", { c: c });
+}
+function padCarets() {
+  var cv = $("#pcanvas"), lay = $("#pcarets");
+  if (!lay) { lay = document.createElement("div"); lay.id = "pcarets"; lay.className = "zcarets"; lay.setAttribute("aria-hidden", "true"); cv.appendChild(lay); }
+  lay.innerHTML = "";
+  if (!RT || !RT.pcar) return;
+  Object.keys(RT.pcar).forEach(function (pid) {
+    var mem = RT.members[pid], xy = padXY(Math.min(RT.pcar[pid], PAD.t.length));
+    if (!mem || !rtAlive(mem)) return;
+    var i = document.createElement("i");
+    i.className = "zcaret"; i.style.setProperty("--c", peerCol(pid));
+    i.style.left = xy[0] + "px"; i.style.top = xy[1] + "px"; i.style.height = PAD_LH + "px";
+    lay.appendChild(i);
+  });
+}
+function padCur(f, c) { RT.pcar = RT.pcar || {}; if (!Number.isInteger(c)) return; if (c < 0) delete RT.pcar[f]; else RT.pcar[f] = c; }
 /* called from rtRecv for pad messages */
-function padRecv(t, d) {
+function padRecv(t, d, f) {
   if (t === "pado") { if (!PD.open) { PD.open = true; drApply(); padGrow(); save(); } return; }
   if (!d || typeof d !== "object") return;
-  if (t === "padt" && typeof d.v === "string") { if (!padTimer) padSetText(d.v); padGrow(); padActive(d.x, d.y); }
+  if (t === "padop") {
+    var op = textApply(PAD.t, d, 20000);
+    if (!op) return;
+    RT.pcar = RT.pcar || {};
+    Object.keys(RT.pcar).forEach(function (k) { RT.pcar[k] = op.shift(RT.pcar[k]); });
+    padCur(f, d.c);
+    padSetText(op.v, op.shift); padGrow();
+    if (Number.isInteger(d.c) && d.c >= 0) { var xy = padXY(d.c); padActive(xy[0], xy[1]); }
+  }
+  if (t === "padc") { padCur(f, d.c); padCarets(); }
+  if (t === "padt" && typeof d.v === "string") {
+    if (f) padCur(f, d.c);
+    if (!padTimer && (!f || Date.now() - padEditT > 3000 || f < RT.me)) padSetText(d.v); else padCarets();
+    padGrow(); padActive(d.x, d.y);
+  }
   if (t === "padd") { padMerge([d]); padDraw(); padGrow(); var l = PAD.s[d.k] && PAD.s[d.k].p.slice(-1)[0]; if (l) padActive(l[0], l[1]); }
   if (t === "pade" && typeof d.k === "string" && PAD.s[d.k]) { delete PAD.s[d.k]; padDraw(); }
   if (t === "padat") padActive(d.x, d.y);
@@ -1811,15 +1868,19 @@ $("#ptext").addEventListener("input", function () {
   LASTSURF = "pad";
   if (!padBurst) undoPush("pad", { text: PAD.t });
   clearTimeout(padBurst); padBurst = setTimeout(function () { padBurst = null; }, 1000);
-  PAD.t = this.value.slice(0, 20000);
+  var old = PAD.t, nv = this.value.slice(0, 20000), c = this.selectionStart;
+  PAD.t = nv;
   padGrow();
   if (!RT) return;
+  var o = textOp(old, nv, c);
+  padEditT = Date.now(); padLastC = c;
+  rtSend("padop", { at: o.at, del: o.del, ins: o.ins, c: c });
   clearTimeout(padTimer);
   var ta = this;
-  padTimer = setTimeout(function () { /* send the text once typing pauses, with the caret as the active spot */
+  padTimer = setTimeout(function () { /* the whole text once typing pauses, with the caret as the active spot */
     padTimer = null;
-    var before = ta.value.slice(0, ta.selectionStart).split("\n");
-    rtSend("padt", { v: PAD.t, x: Math.round(PAD_X0 + before[before.length - 1].length * PAD_CW), y: Math.round(PAD_Y0 + (before.length - 0.5) * PAD_LH) });
+    var cc = ta.selectionStart, xy = padXY(cc);
+    rtSend("padt", { v: PAD.t, c: document.activeElement === ta ? cc : -1, x: xy[0], y: Math.round(xy[1] + PAD_LH / 2) });
   }, 600);
 });
 function padErase(e) {
