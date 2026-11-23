@@ -683,18 +683,19 @@ function zkGrade(p, text) {
     var fit = c.filter(function (x) { return zkFits(e.val, x.s); });
     var pick = fit.filter(function (x) { return !r.hit[x.i]; })[0] || fit[0] || c.filter(function (x) { return r.hit[x.i] == null; })[0] || c[0];
     var ok = fit.indexOf(pick) >= 0;
-    (ok ? r.ok : r.bad).push({ s: pick.s, v: e.val });
+    (ok ? r.ok : r.bad).push({ i: pick.i, s: pick.s, v: e.val });
     r.hit[pick.i] = r.hit[pick.i] || ok;
   });
   r.n = steps.length;
   r.good = steps.filter(function (x) { return r.hit[x.i] === true; }).length;
   r.miss = steps.filter(function (x) { return r.hit[x.i] == null; }).length;
+  r.bad = r.bad.filter(function (x) { return r.hit[x.i] !== true; }); /* working lines like "R0 = 0,5 V" before the right R0 aren't mistakes */
   return r;
 }
 (function () { /* self-check on 2.1: R2 100 kΩ, I_R 10 µA, Vref1 0,25 V, Vref2 2,5 V, Vd 4 V, Ii 8,125 µA */
   var p = PROBS.find(function (x) { return x.id === "2.1"; });
   if (!p) return;
-  var r = zkGrade(p, "r_2 = (Vbg-Vbe)/(2Vt ln N)·R1 = 100000\nI_R=1e-5 A; vref1: 250mV, Vref2 = 2,5 V\nVd = 400 V\nVref = 1.25V\nR_1 = 18k\nIi = 8,125·10^-6 A\nhello");
+  var r = zkGrade(p, "R2 = 0,6 V\nr_2 = (Vbg-Vbe)/(2Vt ln N)·R1 = 100000\nI_R=1e-5 A; vref1: 250mV, Vref2 = 2,5 V\nVd = 400 V\nVref = 1.25V\nR_1 = 18k\nIi = 8,125·10^-6 A\nhello");
   console.assert(r.good === 5 && r.bad.length === 1 && r.miss === 0 && r.skip.length === 2, "zkGrade 2.1", r);
   console.assert(zkKey("SigmaVos") === "ΣVos" && zkKey("sigma_vos") === "σvos" && zkKey("BEta") === "BΗ" && zkKey("Ipi") === "Ipi" && zkClean("11k4") === "11.4k", "zkKey / zkClean");
 })();
