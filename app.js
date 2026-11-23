@@ -222,7 +222,8 @@ function renderSide() {
   /* Mobile strip: each chapter is a tile; only the open chapter's problems show (CSS hides .fold). Search shows all matches. */
   if (!st.openCh) st.openCh = PROBS[st.pi].ch;
   var folding = !st.q;
-  PROBS.forEach(function (p, i) {
+  if (st.view === "vzory" || st.view === "bloky") { h = sideCards(); shown = h ? 1 : 0; }
+  else PROBS.forEach(function (p, i) {
     if (!matches(p)) return;
     shown++;
     if (p.ch !== last) {
@@ -246,6 +247,24 @@ function renderSide() {
   cf.innerHTML = st.confirmReset
     ? '<div class="confirm"><p>Opravdu smazat veškerý postup v tomto prohlížeči? Nejde to vrátit zpět. Předem si ho můžeš exportovat.</p><div><button class="btn danger" type="button" data-sys="reset-yes">Ano, smazat</button><button class="btn" type="button" data-sys="reset-no">Zrušit</button></div></div>'
     : "";
+}
+/* on Vzory and Bloky the list is that page's cards: patterns grouped by the chapter they first appear in, blocks as one list */
+function sideCards() {
+  var q = norm(st.q).trim(), h = "", last = null, n = 0;
+  var items = st.view === "vzory"
+    ? Object.keys(PATTERNS).map(function (k) {
+        var ps = PROBS.filter(function (p) { return p.nai && p.nai.pat.indexOf(k) >= 0; });
+        return { a: "data-pat", k: k, name: PATTERNS[k].name, cnt: ps.length, ch: ps.length ? ps[0].ch : "", cur: st.patFocus === k };
+      })
+    : BLOKY.map(function (b) { return { a: "data-blk", k: b.k, name: b.name, cnt: Object.keys(blkUse()[b.k].pis).length, ch: "", cur: false }; });
+  if (st.view === "vzory") items.sort(function (a, b) { return CH_ORDER.indexOf(a.ch) - CH_ORDER.indexOf(b.ch); }); /* stable: keeps the page's order within a chapter */
+  items.forEach(function (it) {
+    n++;
+    if (q && q.split(/\s+/).some(function (t) { return norm(it.name).indexOf(t) < 0; })) return;
+    if (it.ch && it.ch !== last) { h += '<li class="group">' + CHAP[it.ch] + "</li>"; last = it.ch; }
+    h += '<li><button type="button" ' + it.a + '="' + it.k + '" aria-current="' + it.cur + '"><span class="n">' + n + '</span><span class="t">' + esc(it.name) + '</span><span class="k"><span>' + (it.cnt ? it.cnt + (it.cnt === 1 ? " příklad" : it.cnt < 5 ? " příklady" : " příkladů") :"zatím v žádném příkladu") + "</span></span></button></li>";
+  });
+  return h;
 }
 function scrollListToCurrent() {
   var b = document.querySelector('#list [aria-current="true"]');
