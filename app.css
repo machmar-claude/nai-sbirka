@@ -35,6 +35,10 @@ sub { font-size: .72em; line-height: 0; }
 
 
 .app { min-height: 100vh; background: var(--paper); display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+/* the page is never wider than the screen: Firefox for Android grows its "layout viewport" to fit anything that sticks
+   out, even 1 px (overflow on html doesn't stop it), and the fixed drawers and the sticky schematic then drift with the
+   page until they reach that larger edge. clip (not hidden) doesn't make .app a scroller, so sticky still works. */
+.app { overflow-x: clip; }
 .app > aside { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--rule); background: var(--sheet); display: flex; flex-direction: column; }
 .side-top { position: sticky; top: 0; z-index: 3; background: var(--sheet); }
 .brand { padding: 14px 16px 10px; border-bottom: 1px solid var(--rule); display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
