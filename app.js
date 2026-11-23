@@ -151,14 +151,60 @@ function typeset(el) {
 window.__typeset = function () { typeset($("#main")); typeset($("#dbody")); };
 function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 
+/* where the schematic is drawn on: a grid of cells with the share of dark pixels, as a summed-area table, so labels go
+   where they cover the least. Built once per picture; until it is ready labels are placed by geometry alone. */
+var INKMAP = {};
+function inkMap(p) {
+  var m = INKMAP[p.img];
+  if (m) return typeof m === "object" ? m : null;
+  INKMAP[p.img] = 1;
+  var im = new Image();
+  im.onload = function () {
+    try {
+      var nw = im.naturalWidth, nh = im.naturalHeight, cv = document.createElement("canvas");
+      cv.width = nw; cv.height = nh;
+      var cx = cv.getContext("2d"); cx.drawImage(im, 0, 0);
+      var px = cx.getImageData(0, 0, nw, nh).data, gw = 200, gh = Math.max(1, Math.round(gw * nh / nw)), cnt = new Float32Array(gw * gh);
+      for (var y = 0; y < nh; y++) {
+        var row = Math.min(gh - 1, (y * gh / nh) | 0) * gw;
+        for (var x = 0; x < nw; x++) { var o = (y * nw + x) * 4; if (px[o + 3] > 128 && Math.min(px[o], px[o + 1], px[o + 2]) < 170) cnt[row + Math.min(gw - 1, (x * gw / nw) | 0)]++; }
+      }
+      var G = gw + 1, sat = new Float32Array(G * (gh + 1)), cell = (nw / gw) * (nh / gh);
+      for (var j = 0; j < gh; j++) for (var i = 0; i < gw; i++) sat[(j + 1) * G + i + 1] = cnt[j * gw + i] / cell + sat[j * G + i + 1] + sat[(j + 1) * G + i] - sat[j * G + i];
+      INKMAP[p.img] = { gw: gw, gh: gh, sat: sat };
+      ovRefresh(p);
+    } catch (e) { INKMAP[p.img] = 2; } /* no pixel access (opened as a file): geometry only */
+  };
+  im.onerror = function () { INKMAP[p.img] = 2; };
+  im.src = p.img;
+  return null;
+}
+/* share of the rectangle (picture units) that is drawn on, 0..1 */
+function inkIn(m, W, H, x, y, w, h) {
+  var i0 = Math.max(0, Math.floor(x / W * m.gw)), i1 = Math.min(m.gw, Math.ceil((x + w) / W * m.gw));
+  var j0 = Math.max(0, Math.floor(y / H * m.gh)), j1 = Math.min(m.gh, Math.ceil((y + h) / H * m.gh));
+  if (i1 <= i0 || j1 <= j0) return 0;
+  var G = m.gw + 1, s = m.sat;
+  return (s[j1 * G + i1] - s[j0 * G + i1] - s[j1 * G + i0] + s[j0 * G + i0]) / ((i1 - i0) * (j1 - j0));
+}
+function ovRefresh(p) {
+  if (st.view !== "ex" || PROBS[st.pi] !== p) return;
+  var s = document.querySelector("#main .paper svg.ov");
+  if (s) s.outerHTML = overlay(p.w, p.h, overlayItems(p, curMode(p)).items, INKMAP[p.img]).svg;
+}
+function rectHit(o, x, y, w, h, m) { return x < o[0] + o[2] + m && o[0] < x + w + m && y < o[1] + o[3] + m && o[1] < y + h + m; }
+
 /* ---------- schematic overlay (from NAI průvodce) ---------- */
-function overlay(W, H, items) {
+function overlay(W, H, items, ink) {
   var sx = W / 100, sy = H / 100, fs = Math.max(22, Math.round(Math.max(W, H) / 34));
   var defs = "<defs>";
   for (var k in COL) defs += '<marker id="ah-' + k + '" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="' + COL[k] + '"/></marker>';
   defs += "</defs>";
-  var g = "", lbl = "";
-  var used = {};
+  var g = "", lbl = "", used = {}, shapes = [], reqs = [], named = {};
+  function req(t, c, A) {
+    if (named[c + t]) return; /* the same part in several steps ("zvýraznit vše") gets one label */
+    named[c + t] = true; reqs.push({ t: t, c: c, A: A });
+  }
   (items || []).forEach(function (it) {
     if (!it) return;
     var ck = it.c || "r", c = COL[ck] || ck;
@@ -166,33 +212,61 @@ function overlay(W, H, items) {
     if (it.t) used[ck].push(it.t);
     if (it.b) {
       var X = it.b[0] * sx, Y = it.b[1] * sy, WW = it.b[2] * sx, HH = it.b[3] * sy;
-      g += '<rect class="ov-box" x="' + X + '" y="' + Y + '" width="' + WW + '" height="' + HH + '" rx="' + fs * .35 + '" fill="' + c + '" fill-opacity="0.13" stroke="' + c + '" stroke-width="' + fs * .17 + '"/>';
-      if (it.t) {
-        var above = Y > fs * 1.3, ty = above ? Y - fs * .35 : Y + HH + fs * .95;
-        lbl += '<text x="' + Math.min(X, W - fs * it.t.length * .55) + '" y="' + ty + '" font-size="' + fs + '" font-weight="700" fill="' + c + '" stroke="#fff" stroke-width="' + fs * .28 + '" paint-order="stroke" font-family="system-ui,Segoe UI,Arial">' + esc(it.t) + "</text>";
-      }
+      g += '<rect class="ov-box" x="' + X + '" y="' + Y + '" width="' + WW + '" height="' + HH + '" rx="' + fs * .1 + '" fill="' + c + '" fill-opacity="0.07" stroke="' + c + '" stroke-width="' + fs * .1 + '"/>';
+      shapes.push([X, Y, WW, HH]);
+      if (it.t) req(it.t, c, [X, Y, WW, HH]);
     }
     if (it.a) {
-      var pts = it.a.map(function (q) { return [q[0] * sx, q[1] * sy]; });
+      var pts = it.a.map(function (q) { return [q[0] * sx, q[1] * sy]; }), bh = fs * .21, best = -1, A = null;
       var d = "M" + pts.map(function (q) { return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" L");
-      g += '<path d="' + d + '" fill="none" stroke="' + c + '" stroke-opacity=".28" stroke-width="' + fs * .55 + '" stroke-linejoin="round" stroke-linecap="round"/>';
-      g += '<path class="ov-arrow" d="' + d + '" fill="none" stroke="' + c + '" stroke-width="' + fs * .26 + '" stroke-dasharray="' + fs * .9 + " " + fs * .55 + '" style="--dp:' + -fs * 1.45 + '" stroke-linejoin="round" marker-end="url(#ah-' + ck + ')"/>';
-      if (it.t) {
-        var best = 0, bi = 0;
-        for (var i = 0; i < pts.length - 1; i++) { var L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); if (L > best) { best = L; bi = i; } }
-        var mx = (pts[bi][0] + pts[bi + 1][0]) / 2, my = (pts[bi][1] + pts[bi + 1][1]) / 2;
-        var vert = Math.abs(pts[bi + 1][0] - pts[bi][0]) < Math.abs(pts[bi + 1][1] - pts[bi][1]);
-        var lx = vert ? mx + fs * .55 : mx - fs * it.t.length * .27, ly = vert ? my : my - fs * .5;
-        lbl += '<text x="' + Math.min(lx, W - fs * it.t.length * .56) + '" y="' + ly + '" font-size="' + fs * 1.02 + '" font-weight="800" fill="' + c + '" stroke="#fff" stroke-width="' + fs * .3 + '" paint-order="stroke" font-family="system-ui,Segoe UI,Arial">' + esc(it.t) + "</text>";
+      g += '<path d="' + d + '" fill="none" stroke="' + c + '" stroke-opacity=".25" stroke-width="' + fs * .42 + '" stroke-linejoin="round" stroke-linecap="round"/>';
+      g += '<path class="ov-arrow" d="' + d + '" fill="none" stroke="' + c + '" stroke-width="' + fs * .2 + '" stroke-dasharray="' + fs * .75 + " " + fs * .45 + '" style="--dp:' + -fs * 1.2 + '" stroke-linejoin="round" marker-end="url(#ah-' + ck + ')"/>';
+      for (var i = 0; i < pts.length - 1; i++) {
+        var a = pts[i], b = pts[i + 1], r = [Math.min(a[0], b[0]) - bh, Math.min(a[1], b[1]) - bh, Math.abs(b[0] - a[0]) + 2 * bh, Math.abs(b[1] - a[1]) + 2 * bh];
+        shapes.push(r);
+        var L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (L > best) { best = L; A = r; } /* the label goes beside the longest segment */
       }
+      if (it.t && A) req(it.t, c, A);
     }
     if (it.n) {
-      var NX = it.n[0] * sx, NY = it.n[1] * sy;
-      g += '<circle class="ov-box" cx="' + NX + '" cy="' + NY + '" r="' + fs * .55 + '" fill="' + c + '" fill-opacity=".25" stroke="' + c + '" stroke-width="' + fs * .18 + '"/>';
-      if (it.t) lbl += '<text x="' + Math.min(NX + fs * .75, W - fs * it.t.length * .56) + '" y="' + (NY - fs * .6) + '" font-size="' + fs + '" font-weight="800" fill="' + c + '" stroke="#fff" stroke-width="' + fs * .28 + '" paint-order="stroke" font-family="system-ui,Segoe UI,Arial">' + esc(it.t) + "</text>";
+      var NX = it.n[0] * sx, NY = it.n[1] * sy, nr = fs * .45;
+      g += '<circle class="ov-box" cx="' + NX + '" cy="' + NY + '" r="' + nr + '" fill="' + c + '" fill-opacity=".2" stroke="' + c + '" stroke-width="' + fs * .1 + '"/>';
+      shapes.push([NX - nr, NY - nr, 2 * nr, 2 * nr]);
+      if (it.t) req(it.t, c, [NX - nr, NY - nr, 2 * nr, 2 * nr]);
     }
   });
-  return { svg: '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + defs + g + lbl + "</svg>", used: used };
+  /* labels float next to what they name, with a coloured bar on their side and a thin leader line to it. Each tries spots
+     around its box / segment / node and takes the one that covers the least of the drawing (from inkMap), stays off the
+     other highlights and labels, and is near. */
+  var f = fs * .72, lh = f * 1.3, bar = f * .2, gap = f * .3, placed = [];
+  reqs.forEach(function (q) {
+    var w = bar + gap + q.t.length * f * .6, h = lh, A = q.A, pick = null, cost = 1e9;
+    [lh * .6, lh * 1.2, lh * 2, lh * 3.5].forEach(function (dd) {
+      for (var s = 0; s <= 8; s++) {
+        var fx = A[0] - w + (A[2] + w) * s / 8, fy = A[1] - h + (A[3] + h) * s / 8;
+        [[fx, A[1] - dd - h], [fx, A[1] + A[3] + dd], [A[0] - dd - w, fy], [A[0] + A[2] + dd, fy]].forEach(function (r) {
+          var x = r[0], y = r[1];
+          if (x < 0 || y < 0 || x + w > W || y + h > H) return;
+          var c = (ink ? inkIn(ink, W, H, x, y, w, h) * 12 : 0) + dd / lh * .35;
+          placed.forEach(function (o) { if (rectHit(o, x, y, w, h, f * .25)) c += 100; });
+          shapes.forEach(function (o) { if (rectHit(o, x, y, w, h, 0)) c += 6; });
+          if (c < cost) { cost = c; pick = [x, y]; }
+        });
+      }
+    });
+    if (!pick) pick = [Math.max(0, Math.min(A[0], W - w)), Math.max(0, Math.min(A[1] - h, H - h))];
+    var x = pick[0], y = pick[1];
+    placed.push([x, y, w, h]);
+    /* the bar is on the label's left or right side, whichever is nearer what it names; the leader runs from the bar to
+       the nearest point of it */
+    var right = x + w / 2 < A[0] + A[2] / 2, lx = right ? x + w : x, ly = y + h / 2;
+    var ex = Math.max(A[0], Math.min(lx, A[0] + A[2])), ey = Math.max(A[1], Math.min(ly, A[1] + A[3]));
+    lbl += '<path d="M' + lx.toFixed(1) + "," + ly.toFixed(1) + " L" + ex.toFixed(1) + "," + ey.toFixed(1) + '" stroke="' + q.c + '" stroke-width="' + (f * .09).toFixed(1) + '"/><circle cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="' + (f * .14).toFixed(1) + '" fill="' + q.c + '"/>';
+    lbl += '<rect x="' + (right ? x + w - bar : x).toFixed(1) + '" y="' + (y + h * .1).toFixed(1) + '" width="' + bar.toFixed(1) + '" height="' + (h * .8).toFixed(1) + '" fill="' + q.c + '"/>' +
+      '<text class="ov-t" x="' + (right ? x + w - bar - gap : x + bar + gap).toFixed(1) + '"' + (right ? ' text-anchor="end"' : "") + ' y="' + (y + h / 2 + f * .36).toFixed(1) + '" font-size="' + f.toFixed(1) + '" fill="' + q.c + '" stroke="#fff" stroke-width="' + (f * .22).toFixed(1) + '" paint-order="stroke">' + esc(q.t) + "</text>";
+  });
+  return { svg: '<svg class="ov" viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' + defs + g + lbl + "</svg>", used: used };
 }
 function resolve(e, list) { return (list || []).map(function (x) { return typeof x === "string" ? (e.parts && e.parts[x]) : x; }).filter(Boolean); }
 
@@ -375,7 +449,7 @@ function renderExample() {
   var p = PROBS[st.pi], mode = curMode(p);
   nsClamp(p);
   var ov = overlayItems(p, mode);
-  var o = overlay(p.w, p.h, ov.items);
+  var o = overlay(p.w, p.h, ov.items, inkMap(p));
   var lg = "";
   for (var k in o.used) { var ts = Array.from(new Set(o.used[k])); if (ts.length) lg += '<span><i style="background:' + (COL[k] || k) + '"></i>' + esc(ts.join(", ")) + "</span>"; }
   if (ov.src) lg = '<span class="src">' + ov.src + "</span>" + lg;

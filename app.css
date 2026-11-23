@@ -311,6 +311,7 @@ main { padding-bottom: 56px; }
 @keyframes flow { to { stroke-dashoffset: var(--dp); } } /* --dp = one dash period, so the loop is seamless */
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 .ov-arrow { animation: flow 1.1s linear infinite; }
+.ov-t { font-family: var(--font-mono); font-weight: 600; }
 .ov-box { animation: pulse 1.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .ov-arrow, .ov-box { animation: none; } }
 
