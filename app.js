@@ -222,7 +222,7 @@ function renderSide() {
   /* Mobile strip: each chapter is a tile; only the open chapter's problems show (CSS hides .fold). Search shows all matches. */
   if (!st.openCh) st.openCh = PROBS[st.pi].ch;
   var folding = !st.q;
-  if (st.view === "vzory" || st.view === "bloky") { h = sideCards(); shown = h ? 1 : 0; }
+  if (st.view !== "ex") { h = sideCards(); shown = h ? 1 : 0; }
   else PROBS.forEach(function (p, i) {
     if (!matches(p)) return;
     shown++;
@@ -248,20 +248,25 @@ function renderSide() {
     ? '<div class="confirm"><p>Opravdu smazat veškerý postup v tomto prohlížeči? Nejde to vrátit zpět. Předem si ho můžeš exportovat.</p><div><button class="btn danger" type="button" data-sys="reset-yes">Ano, smazat</button><button class="btn" type="button" data-sys="reset-no">Zrušit</button></div></div>'
     : "";
 }
-/* on Vzory and Bloky the list is that page's cards: patterns grouped by the chapter they first appear in, blocks as one list */
+/* on Vzory, Co na tahák and Bloky the list is that page's items: patterns grouped by the chapter they first appear in,
+   tahák rows by priority, blocks as one list */
 function sideCards() {
-  var q = norm(st.q).trim(), h = "", last = null, n = 0;
-  var items = st.view === "vzory"
-    ? Object.keys(PATTERNS).map(function (k) {
-        var ps = PROBS.filter(function (p) { return p.nai && p.nai.pat.indexOf(k) >= 0; });
-        return { a: "data-pat", k: k, name: PATTERNS[k].name, cnt: ps.length, ch: ps.length ? ps[0].ch : "", cur: st.patFocus === k };
-      })
-    : BLOKY.map(function (b) { return { a: "data-blk", k: b.k, name: b.name, cnt: Object.keys(blkUse()[b.k].pis).length, ch: "", cur: false }; });
-  if (st.view === "vzory") items.sort(function (a, b) { return CH_ORDER.indexOf(a.ch) - CH_ORDER.indexOf(b.ch); }); /* stable: keeps the page's order within a chapter */
+  var q = norm(st.q).trim(), h = "", last = null, n = 0, items;
+  if (st.view === "vzory") {
+    items = Object.keys(PATTERNS).map(function (k) {
+      var ps = PROBS.filter(function (p) { return p.nai && p.nai.pat.indexOf(k) >= 0; }), ch = ps.length ? ps[0].ch : "";
+      return { a: "data-pat", k: k, name: PATTERNS[k].name, cnt: ps.length, ch: ch, g: CHAP[ch], cur: st.patFocus === k };
+    });
+    items.sort(function (a, b) { return CH_ORDER.indexOf(a.ch) - CH_ORDER.indexOf(b.ch); }); /* stable: keeps the page's order within a chapter */
+  } else if (st.view === "tahak") {
+    items = TAHAK.map(function (t, i) { return { a: "data-tk", k: i, name: t.d.replace(/<[^>]+>/g, ""), cnt: t.ex.length, g: "Priorita " + t.p, cur: false }; });
+  } else {
+    items = BLOKY.map(function (b) { return { a: "data-blk", k: b.k, name: b.name, cnt: Object.keys(blkUse()[b.k].pis).length, g: "", cur: false }; });
+  }
   items.forEach(function (it) {
     n++;
     if (q && q.split(/\s+/).some(function (t) { return norm(it.name).indexOf(t) < 0; })) return;
-    if (it.ch && it.ch !== last) { h += '<li class="group">' + CHAP[it.ch] + "</li>"; last = it.ch; }
+    if (it.g && it.g !== last) { h += '<li class="group">' + it.g + "</li>"; last = it.g; }
     h += '<li><button type="button" ' + it.a + '="' + it.k + '" aria-current="' + it.cur + '"><span class="n">' + n + '</span><span class="t">' + esc(it.name) + '</span><span class="k"><span>' + (it.cnt ? it.cnt + (it.cnt === 1 ? " příklad" : it.cnt < 5 ? " příklady" : " příkladů") :"zatím v žádném příkladu") + "</span></span></button></li>";
   });
   return h;
@@ -342,7 +347,7 @@ function practiceHtml(p) {
       h += '<div class="row-actions"><button class="btn" type="button" data-act="hint" data-i="' + i + '">' + (s.hint[i] ? "Skrýt nápovědu" : "Nápověda") + '</button><button class="btn" type="button" data-act="rev" data-i="' + i + '"' + (s.rev[i] ? " disabled" : "") + ">" + (s.rev[i] ? "Řešení odkryto" : "Odkrýt řešení") + "</button>" +
         (C ? '<button class="xlink" type="button" data-nai="' + p.link[i] + '">Vysvětlení · krok ' + (p.link[i] + 1) + ": " + p.nai.steps[p.link[i]].t + "</button>" : "") + "</div>";
       if (s.hint[i]) h += '<p class="hint"><b>Nápověda.</b> ' + fmt(stp.hint) + "</p>";
-      if (s.rev[i]) h += '<div class="solution"><div class="tex">\\[' + stp.tex + "\\]</div>" + (stp.why ? '<p class="why">' + fmt(stp.why) + "</p>" : "") + "</div>";
+      if (s.rev[i]) h += '<div class="solution"><div class="tex" data-hl="s' + i + '">\\[' + stp.tex + "\\]</div>" + (stp.why ? '<p class="why">' + fmt(stp.why) + "</p>" : "") + "</div>";
     }
     h += "</div></li>";
   });
@@ -515,6 +520,13 @@ function showHl(d) {
     var zs = pg(PROBS[st.pi]);
     if (curMode(PROBS[st.pi]) !== "exam" || !zs.zks) { st.mode = "exam"; zs.zks = true; render(); }
   }
+  if (HON && /^s\d+$/.test(HON.k) && st.view === "ex" && HON.pg === hlPage()) { /* a Procvičit solution opens that step's Odkrýt řešení */
+    var sp = PROBS[st.pi], ss = pg(sp), si = +HON.k.slice(1);
+    if (sp.m.steps[si] && (curMode(sp) !== "practice" || !ss.rev[si])) {
+      for (var k = 0; k <= si; k++) if (!solved(sp, k)) ss.rev[k] = true; /* earlier unsolved steps too, or the step stays locked (as following does) */
+      st.mode = "practice"; ss.rev[si] = true; st.pf = si; save(); render();
+    }
+  }
   var el = markHl();
   if (el) el.scrollIntoView({ block: "nearest" });
 }
@@ -539,6 +551,20 @@ document.addEventListener("contextmenu", function (e) {
   rtSend("pshow", { k: pk });
   showPat(pk);
 }, true);
+/* right-click a problem in the list: it opens for everyone in the room, also for those who don't follow or are on a page */
+document.addEventListener("contextmenu", function (e) {
+  var t = RT && e.target.closest && e.target.closest("#list [data-pi]");
+  if (!t) return;
+  e.preventDefault();
+  rtSend("goto", { id: PROBS[+t.dataset.pi].id });
+  go(+t.dataset.pi);
+});
+function rtGoto(id) {
+  var i = PROBS.findIndex(function (p) { return p.id === id; });
+  if (i < 0) return;
+  RT.applying = true; /* like applyView: don't echo my view back */
+  try { history.replaceState(null, "", "#" + PROBS[i].m.id); showProblem(i); } finally { RT.applying = false; }
+}
 document.addEventListener("contextmenu", function (e) {
   if (!RT || st.view !== "bloky") return;
   var t = e.target.closest && !e.target.closest("[data-pat]") && e.target.closest("#main [data-bk]");
@@ -566,6 +592,7 @@ function render(focusSel) {
   if (focusSel) { var el = document.getElementById(focusSel); if (el) el.focus({ preventScroll: true }); }
   else if (keep && (el = document.getElementById("zkin"))) { el.focus({ preventScroll: true }); el.setSelectionRange(keep[0], keep[1]); el.scrollTop = keep[2]; }
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
+  if (st.view === "tahak" && st.tkFocus != null) { var tr = main.querySelector('[data-hl="t' + st.tkFocus + '"]'); if (tr) { tr.classList.add("focus"); tr.scrollIntoView({ block: "center" }); } st.tkFocus = null; }
   if (st.view === "bloky" && st.blkFocus) { var bc = document.getElementById("blk-" + st.blkFocus); if (bc) { bc.classList.add("focus"); bc.scrollIntoView({ block: "start" }); } st.blkFocus = null; }
   updateReport();
   save();
@@ -964,6 +991,7 @@ document.addEventListener("click", function (ev) {
   if (d.pf) { st.pf = +d.pf; render(); return; }
   if (d.nai) { st.mode = "learn"; st.ns = +d.nai; render(); return; }
   if (d.prac) { st.mode = "practice"; st.pf = +d.prac; render(); return; }
+  if (d.tk) { st.tkFocus = +d.tk; if (location.hash === "#tahak") showPage("tahak"); else location.hash = "tahak"; return; }
   if (d.blk) { st.blkFocus = d.blk; if (location.hash === "#bloky") showPage("bloky"); else location.hash = "bloky"; return; }
   if (d.pat) { st.patFocus = d.pat; if (location.hash === "#vzory") showPage("vzory"); else location.hash = "vzory"; return; }
   if (d.know) { st.known[p.id] = !st.known[p.id]; render(); return; }
@@ -1256,7 +1284,7 @@ function rtUi() {
   b.innerHTML = "<h2>Místnost <code>" + RT.code + "</code></h2><p>" + (n ? "Připojeno: " + (n + 1) + " (vy + " + n + ")" + (c.r ? ", z toho " + c.r + " přes veřejné relaye, protože síť nepovolila přímé spojení (ukazatel je trhanější)." : ".") : "Čekám na ostatní… pošli jim odkaz nebo kód.") + "</p>" +
     '<div class="rtrow"><input id="rtlink" readonly aria-label="Odkaz do místnosti" value="' + url.href.replace(/"/g, "&quot;") + '"><button class="btn" type="button" data-rt="copy">Kopírovat</button></div>' +
     '<label><input type="checkbox" id="rtfollow"' + (RT.follow ? " checked" : "") + "> sledovat ostatní (přejdu tam, kam oni)</label>" +
-    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec (v listu, v krocích i na stránkách), zadanou hodnotu, řádek výsledků ve zkoušce, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
+    "<ul class=\"rthelp\"><li><b>Ukazatel</b>: najeď myší na schéma</li><li><b>Poznámka</b>: dvojklik na schéma, klik ji smaže</li><li><b>Kreslení</b>: pravý horní roh schématu</li><li><b>Ukázat ostatním</b>: pravý klik na vzorec (v listu, v krocích i na stránkách), zadanou hodnotu, řádek výsledků ve zkoušce, blok, vzor nebo štítek u schématu. Vzory, tahák a Bloky si jinak každý prochází sám.</li><li><b>Otevřít všem</b>: pravý klik na příklad v seznamu (i těm, kdo nesledují)</li><li><b>Poznámky ✎</b> u pravého okraje se otevřou všem</li></ul>" +
     '<button class="btn" type="button" data-rt="leave">Opustit místnost</button><p class="msg" id="rtmsg" role="status"></p>';
 }
 function viewNow() {
@@ -1370,6 +1398,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "hi" && d && typeof d === "object") { if (d.zoom && typeof d.zoom === "object") Object.keys(d.zoom).slice(0, 200).forEach(function (id) { var w = d.zoom[id]; if (w) zMerge({ id: id, z: w.z, x: w.x, y: w.y }); }); mergePins(d.pins); mergeInk(d.ink); if (d.pad) padRecv("padhi", d.pad);
     if (d.zk && typeof d.zk === "object") Object.keys(d.zk).slice(0, 200).forEach(function (id) { var v = d.zk[id]; if (typeof v === "string" && !zkR()[id] && PROBS.some(function (p) { return p.id === id; })) { zkR()[id] = v.slice(0, 4000); zkShow(id, null); } }); if (d.need === true && (!RT.need || RT.since < d.since)) rtSend("view", viewNow(), msg.f); drawShared(); }
   if (msg.t === "view") applyView(d);
+  if (msg.t === "goto" && d && typeof d.id === "string") rtGoto(d.id);
   if (msg.t === "ptr" && d && typeof d.id === "string") {
     var x = pct(d.x), y = pct(d.y);
     if (x == null || y == null) delete RT.cur[msg.f]; else RT.cur[msg.f] = { id: d.id, x: x, y: y, at: Date.now() };

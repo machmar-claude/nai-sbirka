@@ -430,3 +430,4 @@ main { padding-bottom: 56px; }
 .tag.blk { background: var(--accent-soft); color: var(--accent); }
 .tag.blk:hover { border-color: var(--accent); }
 .card.blok.focus { outline: 2px solid var(--accent); }
+.tbl tr.focus > td { background: var(--accent-soft); }
