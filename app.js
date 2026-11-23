@@ -28,13 +28,13 @@ var DR = { open: false, top: 120, w: 380, h: 420 }; /* formula drawer geometry, 
 var PD = { open: false, top: 560, w: 420, h: 360 }; /* scratchpad drawer, starts below the formulas */
 
 function pg(p) {
-  return st.prog[p.id] || (st.prog[p.id] = { ok: [], rev: [], hint: [], val: [], fb: [], plot: false });
+  return st.prog[p.id] || (st.prog[p.id] = { ok: [], rev: [], hint: [], val: [], fb: [], plot: false, zk: "" });
 }
 function snapshot() {
   var prog = {};
   Object.keys(st.prog).forEach(function (k) {
     var s = st.prog[k];
-    var any = s.plot || [s.ok, s.rev, s.hint, s.val, s.fb].some(function (a) { return a.some(function (x) { return !!x; }); });
+    var any = s.plot || s.zk || [s.ok, s.rev, s.hint, s.val, s.fb].some(function (a) { return a.some(function (x) { return !!x; }); });
     if (any) prog[k] = s;
   });
   var known = {};
@@ -47,7 +47,7 @@ function save() {
 /* sanitise one saved/imported progress record against the real number of steps */
 function cleanProg(p, src) {
   if (!src || typeof src !== "object") return null;
-  var n = p.m.steps.length, o = { ok: [], rev: [], hint: [], val: [], fb: [], plot: !!src.plot };
+  var n = p.m.steps.length, o = { ok: [], rev: [], hint: [], val: [], fb: [], plot: !!src.plot, zk: typeof src.zk === "string" ? src.zk.slice(0, 4000) : "" };
   function at(a, i) { return Array.isArray(a) ? a[i] : undefined; }
   for (var i = 0; i < n; i++) {
     o.ok[i] = at(src.ok, i) === true; o.rev[i] = at(src.rev, i) === true; o.hint[i] = at(src.hint, i) === true;
@@ -63,6 +63,7 @@ function mergeProg(dst, c, n) {
     dst.fb[i] = dst.ok[i] ? "ok" : (dst.fb[i] || c.fb[i]);
   }
   dst.plot = !!dst.plot || c.plot;
+  if (!dst.zk) dst.zk = c.zk;
 }
 function mergeState(src) {
   var changed = 0;
@@ -132,7 +133,7 @@ function frontier(p) { for (var i = 0; i < p.m.steps.length; i++) if (!solved(p,
 function doneCount(p) { var c = 0; for (var i = 0; i < p.m.steps.length; i++) if (solved(p, i)) c++; return c; }
 function focusIdx(p) { var n = p.m.steps.length; if (st.pf != null && st.pf < n && st.pf <= frontier(p)) return st.pf; return Math.min(frontier(p), n - 1); }
 function pinsHtml(p) { var h = ""; for (var i = 0; i < p.m.steps.length; i++) h += '<i class="' + (solved(p, i) ? "on" : "") + '"></i>'; return '<span class="pins" aria-label="' + doneCount(p) + " z " + p.m.steps.length + ' kroků">' + h + "</span>"; }
-function curMode(p) { return p.nai ? st.mode : "practice"; }
+function curMode(p) { return st.mode === "exam" ? "exam" : p.nai ? st.mode : "practice"; }
 function nsClamp(p) { if (p.nai) st.ns = Math.max(0, Math.min(st.ns, p.nai.steps.length - 1)); else st.ns = 0; }
 function typeset(el) {
   if (window.MathJax && MathJax.typesetPromise) {
@@ -327,7 +328,7 @@ function practiceHtml(p) {
   return h;
 }
 function overlayItems(p, mode) {
-  if (!p.nai) return { items: [], src: "" };
+  if (!p.nai || mode === "exam") return { items: [], src: "" };
   if (st.clean) return { items: [], src: "Zobrazeno původní schéma bez zvýraznění." };
   if (mode === "learn") {
     if (st.allhl) { var a = []; p.nai.steps.forEach(function (s) { a = a.concat(resolve(p.nai, s.h)); }); return { items: a, src: "" }; }
@@ -347,20 +348,20 @@ function renderExample() {
   var lg = "";
   for (var k in o.used) { var ts = Array.from(new Set(o.used[k])); if (ts.length) lg += '<span><i style="background:' + (COL[k] || k) + '"></i>' + esc(ts.join(", ")) + "</span>"; }
   if (ov.src) lg = '<span class="src">' + ov.src + "</span>" + lg;
-  if (!lg) lg = mode === "practice" ? (p.nai ? "<span>V tomto kroku se ve schématu nic nezvýrazňuje.</span>" : "<span>K tomuto příkladu není zvýraznění, jen schéma.</span>") : "<span>V tomto kroku nic nezvýrazňuji.</span>";
-  var ctl = "";
-  if (p.nai) {
-    ctl = '<div class="seg" role="group" aria-label="Režim"><button type="button" data-mode="learn" aria-pressed="' + (mode === "learn") + '">Pochopit <small>' + p.nai.steps.length + ' kroků</small></button><button type="button" data-mode="practice" aria-pressed="' + (mode === "practice") + '">Procvičit <small>' + doneCount(p) + "/" + p.m.steps.length + "</small></button></div>";
-  }
+  if (!lg) lg = mode === "exam" ? "<span>Ve zkoušce se ve schématu nic nezvýrazňuje.</span>" : mode === "practice" ? (p.nai ? "<span>V tomto kroku se ve schématu nic nezvýrazňuje.</span>" : "<span>K tomuto příkladu není zvýraznění, jen schéma.</span>") : "<span>V tomto kroku nic nezvýrazňuji.</span>";
+  var ctl = '<div class="seg" role="group" aria-label="Režim">' +
+    (p.nai ? '<button type="button" data-mode="learn" aria-pressed="' + (mode === "learn") + '">Pochopit <small>' + p.nai.steps.length + " kroků</small></button>" : "") +
+    '<button type="button" data-mode="practice" aria-pressed="' + (mode === "practice") + '">Procvičit <small>' + doneCount(p) + "/" + p.m.steps.length + "</small></button>" +
+    '<button type="button" data-mode="exam" aria-pressed="' + (mode === "exam") + '">Zkouška</button></div>';
   var solo = !p.nai;
   return '<div class="sheet">' + headHtml(p) + taskHtml(p) +
     '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool ? " inking " + st.tool : "") + (zcur().z > 1 ? " zoomed" : "") + '" style="--ar:' + p.w + "/" + p.h + '"><div class="zoom" style="' + zStyle(zcur()) + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + "</div>" + inkBar() +
       '<button type="button" class="zbadge" data-zreset title="Zpět na celé schéma">' + Math.round(zcur().z * 100) + " %</button></div>" +
     '<figcaption class="legend">' + lg + "</figcaption>" +
-    (p.nai ? '<div class="opts">' +
+    (p.nai && mode !== "exam" ? '<div class="opts">' +
       (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
       '<label><input type="checkbox" id="clean" ' + (st.clean ? "checked" : "") + "> původní schéma bez anotací</label></div>" : "") + "</figure>" +
-    '<div class="col">' + ctl + (mode === "learn" ? learnHtml(p) : practiceHtml(p)) + "</div></div></div>";
+    '<div class="col">' + ctl + (mode === "learn" ? learnHtml(p) : mode === "exam" ? examHtml(p) : practiceHtml(p)) + "</div></div></div>";
 }
 
 /* ---------- Vzory and Tahák pages ---------- */
@@ -520,6 +521,7 @@ document.addEventListener("contextmenu", function (e) {
 
 /* ---------- render ---------- */
 function render(focusSel) {
+  var ae = document.activeElement, keep = ae && ae.id === "zkin" ? [ae.selectionStart, ae.selectionEnd, ae.scrollTop] : null;
   renderSide();
   var main = $("#main");
   try { if (window.MathJax && MathJax.typesetClear) MathJax.typesetClear([main]); } catch (e) {}
@@ -532,6 +534,7 @@ function render(focusSel) {
   main.dataset.colKey = colKey;
   typeset(main);
   if (focusSel) { var el = document.getElementById(focusSel); if (el) el.focus({ preventScroll: true }); }
+  else if (keep && (el = document.getElementById("zkin"))) { el.focus({ preventScroll: true }); el.setSelectionRange(keep[0], keep[1]); el.scrollTop = keep[2]; }
   if (st.view === "vzory" && st.patFocus) { var c = document.getElementById("pat-" + st.patFocus); if (c) c.scrollIntoView({ block: "nearest" }); }
   if (st.view === "bloky" && st.blkFocus) { var bc = document.getElementById("blk-" + st.blkFocus); if (bc) { bc.classList.add("focus"); bc.scrollIntoView({ block: "start" }); } st.blkFocus = null; }
   updateReport();
@@ -557,7 +560,7 @@ function updateReport() {
     title = pgN[1];
   } else {
     var p = PROBS[st.pi], mode = curMode(p);
-    var step = mode === "learn" ? "Pochopit, krok " + (st.ns + 1) : "Procvičit, krok " + (focusIdx(p) + 1);
+    var step = mode === "learn" ? "Pochopit, krok " + (st.ns + 1) : mode === "exam" ? "Zkouška" : "Procvičit, krok " + (focusIdx(p) + 1);
     where = "Příklad: " + p.id + " · " + p.m.title + "\nRežim: " + step;
     title = "[" + p.id + "] ";
   }
@@ -614,6 +617,99 @@ function check(i) {
     var f = frontier(p);
     render(f < p.m.steps.length && p.m.steps[f].ans != null ? "ans-" + p.id.replace(/\./g, "-") + "-" + f : null);
   } else { s.fb[i] = "bad"; render(inp ? inp.id : null); }
+}
+
+/* ---------- Zkouška: one text box, "R2 = 35 kΩ" per line ----------
+   A line is "name = value" (also ":" or "≈"); several on a line split by ";" or by "," before the next "name =".
+   With working ("R2 = (…)·R1 = 100k") the last value counts. Values use the answer parser above plus 8,1·10^-6,
+   11k4 and nV/sqrt(Hz). A name matches a step's sym (or one of its "|" aliases) ignoring _ {} \ and spaces; case is
+   ignored as long as that doesn't change which quantity it is. Several steps with one name: the value decides. */
+var GREEK = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega".split(" ");
+var GLO = "αβγδεζηθικλμνξοπρστυφχψω", GUP = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ";
+/* a Greek letter's name becomes the letter only as a word of its own: beta → β, Beta / BETA → Β, but bEta = b + Eta */
+function zkKey(s) {
+  return String(s).replace(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])/g, function (t) {
+    var lo = t.toLowerCase(), i = GREEK.indexOf(lo);
+    if (i < 0 || (t !== lo && t !== lo.toUpperCase() && t !== lo.charAt(0).toUpperCase() + lo.slice(1))) return t;
+    return t === lo ? GLO.charAt(i) : GUP.charAt(i);
+  }).replace(/[\s_{}\\]/g, "");
+}
+function zkClean(v) {
+  v = v.trim().replace(/^~/, "").replace(/\.$/, "")
+    .replace(/\s*[·*×x]\s*10\s*\^\s*\(?\s*([-+−–]?\d+)\s*\)?/, "e$1")
+    .replace(/(sqrt|rt)\s*\(?\s*hz\s*\)?/i, "√Hz");
+  return v.replace(/^(\d+)([pnuµμmkMG])(\d+)(.*)$/, "$1.$3$2$4"); /* 11k4 = 11,4k */
+}
+/* a bare number may be in the step's unit or in the base unit: R2 = 100 and R2 = 100000 both mean 100 kΩ */
+function zkFits(raw, stp) {
+  var vs = ansValues(raw, stp.unit), tol = stp.tolAbs != null ? stp.tolAbs : 0.02 * Math.abs(stp.ans) + 1e-12;
+  if (vs && /^[-+]?[\d.,]+(e[-+]?\d+)?$/i.test(raw.replace(/\s/g, ""))) vs.push(vs[0] / unitFactors(stp.unit || "", true)[0]);
+  return !!vs && [stp.ans].concat(stp.alt || []).some(function (a) { return vs.some(function (v) { return Math.abs(v - a) <= tol; }); });
+}
+function zkParse(text) {
+  var out = [];
+  String(text).split(/\n|;/).forEach(function (l) {
+    l.split(/,\s*(?=[A-Za-zͰ-Ͽ\\][\w{}()\\Ͱ-Ͽ]*\s*[=:≈])/).forEach(function (pc) {
+      pc = pc.trim();
+      if (!pc) return;
+      var m = /^([^=≈]+?)\s*[=≈]\s*(.+)$/.exec(pc) || /^([^:]+?)\s*:\s*(.+)$/.exec(pc);
+      var name = m && m[1].split(":").pop().trim(), val = m && zkClean(m[2].split(/[=≈]/).pop());
+      out.push(name && ansValues(val, "") ? { raw: pc, name: name, val: val } : { raw: pc });
+    });
+  });
+  return out;
+}
+function zkGrade(p, text) {
+  var steps = [], giv = {}, r = { ok: [], bad: [], skip: [], hit: {} };
+  p.m.steps.forEach(function (s, i) { if (s.ans != null) steps.push({ i: i, s: s, k: String(s.sym || "").split("|").map(zkKey) }); });
+  (p.m.given || []).forEach(function (g) { /* given values you copy down are fine, not "nehodnoceno" */
+    String(g).split(/,\s+/).forEach(function (seg) { if (seg.indexOf("=") > 0) giv[zkKey(seg.split("=")[0].trim().split(/[:\s]+/).pop()).toLowerCase()] = 1; });
+  });
+  zkParse(text).forEach(function (e) {
+    if (!e.name) { r.skip.push(e.raw); return; }
+    var k = zkKey(e.name), kl = k.toLowerCase();
+    var ex = steps.filter(function (x) { return x.k.indexOf(k) >= 0; });
+    var ci = steps.filter(function (x) { return x.k.some(function (y) { return y.toLowerCase() === kl; }); });
+    var ciFit = ci.filter(function (x) { return zkFits(e.val, x.s); });
+    var c = ex.length ? ex : ciFit.length ? ciFit : giv[kl] ? [] : ci;
+    if (!c.length) { if (!giv[kl]) r.skip.push(e.raw); return; }
+    var fit = c.filter(function (x) { return zkFits(e.val, x.s); });
+    var pick = fit.filter(function (x) { return !r.hit[x.i]; })[0] || fit[0] || c.filter(function (x) { return r.hit[x.i] == null; })[0] || c[0];
+    var ok = fit.indexOf(pick) >= 0;
+    (ok ? r.ok : r.bad).push({ s: pick.s, v: e.val });
+    r.hit[pick.i] = r.hit[pick.i] || ok;
+  });
+  r.n = steps.length;
+  r.good = steps.filter(function (x) { return r.hit[x.i] === true; }).length;
+  r.miss = steps.filter(function (x) { return r.hit[x.i] == null; }).length;
+  return r;
+}
+(function () { /* self-check on 2.1: R2 100 kΩ, I_R 10 µA, Vref1 0,25 V, Vref2 2,5 V, Vd 4 V, Ii 8,125 µA */
+  var p = PROBS.find(function (x) { return x.id === "2.1"; });
+  if (!p) return;
+  var r = zkGrade(p, "r_2 = (Vbg-Vbe)/(2Vt ln N)·R1 = 100000\nI_R=1e-5 A; vref1: 250mV, Vref2 = 2,5 V\nVd = 400 V\nVref = 1.25V\nR_1 = 18k\nIi = 8,125·10^-6 A\nhello");
+  console.assert(r.good === 5 && r.bad.length === 1 && r.miss === 0 && r.skip.length === 2, "zkGrade 2.1", r);
+  console.assert(zkKey("SigmaVos") === "ΣVos" && zkKey("sigma_vos") === "σvos" && zkKey("BEta") === "BΗ" && zkKey("Ipi") === "Ipi" && zkClean("11k4") === "11.4k", "zkKey / zkClean");
+})();
+function examHtml(p) {
+  var s = pg(p);
+  function name(stp) { return fmt(String(stp.sym || "").split("|")[0]); }
+  function pill(cls) { return function (x) { return '<span class="zpill ' + cls + '">' + name(x.s) + " = " + esc(x.v) + "</span>"; }; }
+  var h = '<div class="exam"><p class="extask">' + fmt(p.m.task) + "</p>" +
+    '<textarea id="zkin" rows="9" spellcheck="false" autocomplete="off" aria-label="Tvoje výsledky, jeden na řádek" placeholder="R2 = 35 kΩ&#10;T = 25 ns">' + esc(s.zk || "") + "</textarea>" +
+    '<div class="row-actions"><button class="btn primary" type="button" data-zk="check">Zkontrolovat</button>' +
+    '<button class="btn" type="button" data-zk="sol" aria-pressed="' + !!s.zks + '">' + (s.zks ? "Skrýt výsledky" : "Ukázat výsledky") + "</button></div>";
+  if (s.zkc != null) {
+    var r = zkGrade(p, s.zkc);
+    h += '<div class="zres" role="status"><p class="zsum"><b>Správně ' + r.good + "/" + r.n + "</b>" + (r.miss ? "<span>Chybí " + r.miss + "</span>" : "") + "</p>" +
+      (r.ok.length ? '<div class="zpills">' + r.ok.map(pill("ok")).join("") + "</div>" : "") +
+      (r.bad.length ? '<div class="zpills">' + r.bad.map(pill("bad")).join("") + "</div>" : "") +
+      (r.skip.length ? '<p class="zskip">Nehodnoceno: ' + r.skip.map(esc).join(" · ") + "</p>" : "") + "</div>";
+  }
+  if (s.zks) h += '<table class="ztab"><tbody>' + p.m.steps.filter(function (x) { return x.ans != null; }).map(function (x) {
+    return "<tr><td>" + name(x) + "</td><td>" + String(x.ans).replace(".", ",") + (x.unit && x.unit !== "–" ? " " + esc(x.unit) : "") + "</td></tr>";
+  }).join("") + "</tbody></table>";
+  return h + "</div>";
 }
 
 /* ---------- export / import / reset ---------- */
@@ -716,6 +812,11 @@ document.addEventListener("click", function (ev) {
     else if (d.nav === "prev" && st.ns > 0) st.ns--;
     render(); return;
   }
+  if (d.zk) {
+    var zs = pg(p), box = $("#zkin");
+    if (d.zk === "check") { if (box) zs.zk = box.value; zs.zkc = zs.zk; } else zs.zks = !zs.zks;
+    render(); return;
+  }
   if (d.act) {
     var i = +d.i, s = pg(p);
     if (d.act === "check") { check(i); return; }
@@ -740,6 +841,7 @@ document.addEventListener("change", function (ev) {
 document.addEventListener("input", function (ev) {
   var tg = ev.target;
   if (tg.id === "q") { st.q = tg.value; renderSide(); return; }
+  if (tg.id === "zkin") { pg(PROBS[st.pi]).zk = tg.value; save(); return; }
   var i = tg.dataset && tg.dataset.inp;
   if (i != null) { var s = pg(PROBS[st.pi]); s.val[+i] = tg.value; s.fb[+i] = null; save(); }
 });
@@ -747,6 +849,7 @@ document.addEventListener("keydown", function (ev) {
   var tg = ev.target, i = tg.dataset && tg.dataset.inp;
   if (i != null) { if (ev.key === "Enter") { ev.preventDefault(); check(+i); } return; }
   if (tg.id === "rtcode" && ev.key === "Enter") { rtJoin(tg.value, false); return; }
+  if (tg.id === "zkin" && ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); var zb = document.querySelector('[data-zk="check"]'); if (zb) zb.click(); return; }
   var zk = String(ev.key).toLowerCase();
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (zk === "z" || zk === "y")) { /* Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo */
     if (tg.id === "ptext") LASTSURF = "pad";
@@ -1053,7 +1156,7 @@ function applyView(d) {
     var p = PROBS[i], changed = st.lastId !== p.id, onPage = st.view !== "ex";
     st.pi = i; st.lastId = p.id; st.openCh = p.ch;
     if (!onPage) st.patFocus = null;
-    st.mode = d.mode === "practice" ? "practice" : "learn";
+    st.mode = d.mode === "practice" || d.mode === "exam" ? d.mode : "learn";
     st.ns = isFinite(d.ns) ? Math.max(0, d.ns | 0) : 0;
     st.pf = d.pf == null || !isFinite(d.pf) ? null : Math.max(0, d.pf | 0);
     st.allhl = d.allhl === true; st.clean = d.clean === true;

@@ -214,6 +214,21 @@ main { min-width: 0; background: var(--paper); color: var(--ink); font-family: v
 .hint { margin: 0; padding: 7px 12px; border-left: 3px solid var(--mark); background: var(--sheet); font-size: 14.5px; max-width: 70ch; }
 .hint b { color: var(--mark); }
 .noans { margin: 0; font-size: 13px; color: var(--muted); }
+/* Zkouška */
+.exam { display: flex; flex-direction: column; gap: 10px; }
+.extask { margin: 0; }
+#zkin { width: 100%; box-sizing: border-box; min-height: 9em; padding: 8px 10px; border: 1px solid var(--rule); background: var(--sheet); color: inherit; font-family: var(--font-mono); font-size: 14.5px; line-height: 1.6; resize: vertical; }
+#zkin:focus { border-color: var(--accent); outline: none; }
+.zsum { margin: 0; display: flex; gap: 14px; align-items: baseline; }
+.zsum span { color: var(--muted); font-size: 13px; }
+.zpills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.zpill { font-family: var(--font-mono); font-size: 13px; padding: 2px 9px; border-radius: 999px; }
+.zpill.ok { color: var(--ok); background: var(--ok-soft); }
+.zpill.bad { color: var(--bad); background: var(--bad-soft); }
+.zskip { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.ztab { border-collapse: collapse; font-size: 14px; }
+.ztab td { padding: 3px 14px 3px 0; border-bottom: 1px solid var(--rule); }
+.ztab td + td { font-family: var(--font-mono); }
 .solution { border: 1px solid var(--rule); border-top: 3px solid var(--accent); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; background: var(--sheet); }
 .solution .tex { overflow-x: auto; overflow-y: hidden; }
 .solution .why { margin: 0; font-size: 14.5px; max-width: 70ch; }
