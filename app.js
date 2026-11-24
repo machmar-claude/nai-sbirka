@@ -1325,6 +1325,19 @@ function fsSet(on, mine) {
   if (mine && RT) rtSend("fs", { on: on });
 }
 document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-zfs]")) fsSet(!FS, true); });
+/* the button shows while the pointer moves over the picture (or a finger taps it) and hides 1.5 s after it stops or leaves */
+var fsMoveT = null;
+function fsMoving(e) {
+  var pap = e.target.closest && e.target.closest("#main .paper");
+  var old = document.querySelector("#main .paper.moving");
+  if (old && old !== pap) old.classList.remove("moving");
+  if (!pap) return;
+  pap.classList.add("moving");
+  clearTimeout(fsMoveT);
+  fsMoveT = setTimeout(function () { pap.classList.remove("moving"); }, 1500);
+}
+document.addEventListener("pointermove", fsMoving);
+document.addEventListener("pointerdown", fsMoving);
 document.addEventListener("keydown", function (e) { if (e.key === "Escape" && FS && st.view === "ex") fsSet(false, true); });
 /* a click on the dimmed part beside the picture closes it. A popover's backdrop lets clicks through to the page under it,
    so those are stopped here before anything else sees them. A pen line ending past the edge is still the paper's
