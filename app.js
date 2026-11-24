@@ -385,16 +385,20 @@ function learnHtml(p) {
     st_ += '<li class="lstep ' + (k === st.ns ? "on" : "") + " " + (k < st.ns ? "done" : "") + '"><button class="lhead" type="button" data-k="' + k + '"><span class="n">' + (k + 1) + '</span><span class="t">' + s.t + "</span></button>" +
       '<div class="lbody">' + (s.x || "") + (eq ? '<div class="eq">' + eq + "</div>" : "") + (s.r ? '<div class="res" data-hl="e' + k + 'r">' + s.r + "</div>" : "") + (s.m ? '<div class="mem">' + s.m + "</div>" : "") + (s.w ? '<div class="warn">' + s.w + "</div>" : "") + x + "</div></li>";
   });
-  var tk = (e.tk || []).map(function (t, i) {
-    var cls = t[1] === "T" ? "on" : t[1] === "+" ? "add" : "der", lab = t[1] === "T" ? "na taháku" : t[1] === "+" ? "doplnit" : "odvodit";
-    return '<div class="tk" data-hl="tk' + i + '"><span class="badge ' + cls + '">' + lab + "</span><div>$" + t[0] + "$" + (t[2] ? ' <span class="kbd">· ' + t[2] + "</span>" : "") + "</div></div>";
-  }).join("");
   return '<div class="idea"><b>Myšlenka v jedné větě:</b> ' + e.idea + "</div>" +
     '<ol class="lsteps ' + (st.showall ? "showall" : "") + '">' + st_ + "</ol>" +
     '<div class="navrow"><button class="btn" type="button" data-nav="prev">← Předchozí krok</button><button class="btn" type="button" data-nav="all">' + (st.showall ? "Sbalit kroky" : "Rozbalit všechny kroky") + '</button><button class="btn primary" type="button" data-nav="next">Další krok →</button></div>' +
     '<p class="kbd">Klávesy: → nebo mezerník další krok, ← předchozí krok, J další příklad, K předchozí příklad.</p>' +
     (e.res ? '<div class="box"><h3>Výsledky</h3><div>' + e.res.replace(/\$[^$]+\$/g, function (x) { return '<span data-hl="r' + (rn++) + '">' + x + "</span>"; }) + "</div></div>" : "") +
-    (tk ? '<div class="box"><h3>Vzorce v tomto příkladu</h3>' + tk + "</div>" : "");
+    tkBox(e.tk);
+}
+/* "Vzorce v tomto příkladu": [TeX, T = na taháku / + = doplnit / d = odvodit, note] */
+function tkBox(list) {
+  var tk = (list || []).map(function (t, i) {
+    var cls = t[1] === "T" ? "on" : t[1] === "+" ? "add" : "der", lab = t[1] === "T" ? "na taháku" : t[1] === "+" ? "doplnit" : "odvodit";
+    return '<div class="tk" data-hl="tk' + i + '"><span class="badge ' + cls + '">' + lab + "</span><div>$" + t[0] + "$" + (t[2] ? ' <span class="kbd">· ' + t[2] + "</span>" : "") + "</div></div>";
+  }).join("");
+  return tk ? '<div class="box"><h3>Vzorce v tomto příkladu</h3>' + tk + "</div>" : "";
 }
 function practiceHtml(p) {
   var m = p.m, s = pg(p), f = frontier(p), fi = focusIdx(p), C = !!(p.link && p.nai);
@@ -430,6 +434,7 @@ function practiceHtml(p) {
     h += '<section class="plot"><p class="section-label">Kmitočtová charakteristika ze simulace</p><p>Graf obsahuje výsledky. Otevři ho, až budeš mít spočítané nuly, póly a zisky.</p><button class="btn" type="button" data-plot="1" style="align-self:flex-start">' + (s.plot ? "Skrýt graf" : "Zobrazit graf") + "</button>" +
       (s.plot ? '<div class="pbox"><img alt="Simulovaná kmitočtová charakteristika příkladu ' + p.id + '" src="' + m.plot + '" width="' + m.pw + '" height="' + m.ph + '"></div>' : "") + "</section>";
   }
+  if (!p.nai) h += tkBox(m.tk); /* K problems have no Pochopit, so their formulas sit here */
   return h;
 }
 function overlayItems(p, mode) {
