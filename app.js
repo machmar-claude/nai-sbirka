@@ -1326,6 +1326,20 @@ function fsSet(on, mine) {
 }
 document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-zfs]")) fsSet(!FS, true); });
 document.addEventListener("keydown", function (e) { if (e.key === "Escape" && FS && st.view === "ex") fsSet(false, true); });
+/* a click on the dimmed part beside the picture closes it. A popover's backdrop lets clicks through to the page under it,
+   so those are stopped here before anything else sees them. A pen line ending past the edge is still the paper's
+   (pointer capture), so it does not count. */
+function fsOut(e) {
+  var pap = FS && st.view === "ex" && document.querySelector("#main .paper.fs");
+  return !!pap && !pap.contains(e.target);
+}
+["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick", "auxclick", "contextmenu"].forEach(function (t) {
+  window.addEventListener(t, function (e) {
+    if (!fsOut(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    if (t === "click") fsSet(false, true);
+  }, true);
+});
 
 var inkNow = null;
 document.addEventListener("pointerdown", function (e) {
