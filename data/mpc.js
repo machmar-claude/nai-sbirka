@@ -1823,7 +1823,7 @@ window.MPC = [
     }
     ,{
       id: "k1", num: "K1", kind: "RC článek", src: "RC_EXPLAIN", page: 9, img: "img/k1.png", w: 492, h: 555, plot: "img/k1-plot.jpg", pw: 1093, ph: 735,
-      tk: [[R`Z_{R\parallel C}=\frac{R}{1+pCR}`, 'd', "R₁ ∥ C"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "τ ze závorky (1 + pτ): v čitateli nula, ve jmenovateli pól"], [R`A_{dB}=20\log A`, '+']],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`Z_{R\parallel C}=\frac{R}{1+pCR}`, 'd', "R₁ ∥ C"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "τ ze závorky (1 + pτ): v čitateli nula, ve jmenovateli pól"], [R`A_{dB}=20\log A`, '+']],
       title: "RC článek 1: R1 ∥ C v sérii, R2 k zemi",
       task: "Odvoď přenos A = V_out/V_in tohoto RC článku a uprav ho do tvaru se závorkami (1 + p·τ). Urči kmitočet nuly f_z a pólu f_p a přenos pro f → 0 a f → ∞. Nakresli kmitočtovou charakteristiku.",
       given: ["R1 = 100 kΩ", "C = 10 nF", "R2 = 5 kΩ", "p = jω"],
@@ -1856,7 +1856,7 @@ window.MPC = [
     },
     {
       id: "k2", num: "K2", kind: "RC článek", src: "RC_EXPLAIN", page: 10, img: "img/k2.png", w: 625, h: 605, plot: "img/k2-plot.jpg", pw: 1004, ph: 741,
-      tk: [[R`Z_{R+C}=R+\frac{1}{pC}=\frac{1+pCR}{pC}`, 'd', "R₁ + C v sérii"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "p v čitateli: nula v 0 Hz"], [R`A_{dB}=20\log A`, '+']],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`Z_{R+C}=R+\frac{1}{pC}=\frac{1+pCR}{pC}`, 'd', "R₁ + C v sérii"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "p v čitateli: nula v 0 Hz"], [R`A_{dB}=20\log A`, '+']],
       title: "RC článek 2: C a R1 v sérii, R2 k zemi",
       task: "Odvoď přenos A = V_out/V_in tohoto RC článku. Urči kmitočty nuly a pólu a přenos pro f → 0 a f → ∞.",
       given: ["C = 1 nF", "R1 = 50 kΩ", "R2 = 50 kΩ"],
@@ -1885,7 +1885,7 @@ window.MPC = [
     },
     {
       id: "k3", num: "K3", kind: "RC článek", src: "RC_EXPLAIN", page: 11, img: "img/k3.png", w: 655, h: 572, plot: "img/k3-plot.jpg", pw: 1031, ph: 773,
-      tk: [[R`Z_{R\parallel C}=\frac{R}{1+pCR}`, 'd', "R₂ ∥ C"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "pól od C a R₁ ∥ R₂"], [R`A_{dB}=20\log A`, '+']],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`Z_{R\parallel C}=\frac{R}{1+pCR}`, 'd', "R₂ ∥ C"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "pól od C a R₁ ∥ R₂"], [R`A_{dB}=20\log A`, '+']],
       title: "RC článek 3: R1 v sérii, R2 ∥ C k zemi",
       task: "Odvoď přenos A = V_out/V_in tohoto RC článku. Urči kmitočet pólu a přenos pro f → 0 a f → ∞.",
       given: ["R1 = 50 kΩ", "C = 2 nF", "R2 = 50 kΩ"],
@@ -1910,7 +1910,7 @@ window.MPC = [
     },
     {
       id: "k4", num: "K4", kind: "RC článek", src: "RC_EXPLAIN", page: 12, img: "img/k4.png", w: 485, h: 519, plot: "img/k4-plot.jpg", pw: 1066, ph: 715,
-      tk: [[R`Z_{R\parallel C}=\frac{R}{1+pCR}`, 'd', "obě větve"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "τ ze závorky (1 + pτ): v čitateli nula, ve jmenovateli pól"], [R`A(\infty)=\frac{C_1}{C_1+C_2}`, 'd', "kapacitní dělič"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`Z_{R\parallel C}=\frac{R}{1+pCR}`, 'd', "obě větve"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "τ ze závorky (1 + pτ): v čitateli nula, ve jmenovateli pól"], [R`A(\infty)=\frac{C_1}{C_1+C_2}`, 'd', "kapacitní dělič"]],
       title: "RC článek 4: dvě paralelní RC kombinace",
       task: "Odvoď přenos A = V_out/V_in tohoto RC článku. Urči kmitočty nuly a pólu a přenos pro f → 0 a f → ∞.",
       given: ["R1 = 20 kΩ, C1 = 1 nF (sériová větev)", "R2 = 100 kΩ, C2 = 10 nF (k zemi)"],
@@ -1943,7 +1943,7 @@ window.MPC = [
     },
     {
       id: "k5", num: "K5", kind: "RC článek", src: "RC_EXPLAIN", page: 13, img: "img/k5.png", w: 546, h: 552, plot: "img/k5-plot.jpg", pw: 1076, ph: 713,
-      tk: [[R`Z_{R+C}=R+\frac{1}{pC}=\frac{1+pCR}{pC}`, 'd', "obě větve"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "τ ze závorky (1 + pτ): v čitateli nula, ve jmenovateli pól"], [R`A(0)=\frac{C_1}{C_1+C_2}`, 'd', "kapacitní dělič"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`Z_{R+C}=R+\frac{1}{pC}=\frac{1+pCR}{pC}`, 'd', "obě větve"], [R`A=\frac{Z_2}{Z_1+Z_2}`, 'd', "dělič z impedancí"], [R`f=\frac{1}{2\pi\tau}`, '+', "τ ze závorky (1 + pτ): v čitateli nula, ve jmenovateli pól"], [R`A(0)=\frac{C_1}{C_1+C_2}`, 'd', "kapacitní dělič"]],
       title: "RC článek 5: dvě sériové RC kombinace",
       task: "Odvoď přenos A = V_out/V_in tohoto RC článku. Urči kmitočty nuly a pólu a přenos pro f → 0 a f → ∞.",
       given: ["R1 = 40 kΩ, C1 = 1 nF (sériová větev)", "R2 = 100 kΩ, C2 = 20 nF (k zemi)"],
@@ -1976,7 +1976,7 @@ window.MPC = [
     },
     {
       id: "k6", num: "K6", kind: "RC článek", src: "RC_EXPLAIN", page: 14, img: "img/k6.png", w: 567, h: 510, plot: "img/k6-plot.jpg", pw: 1100, ph: 1389,
-      tk: [[R`A=\frac{pC_1R_2}{1+pb+p^2a}`, 'd', "uzlové napětí"], [R`\omega_{p1,2}=\frac{b\mp\sqrt{b^2-4a}}{2a}`, '+', "kořeny 1 + pb + p²a"], [R`f=\frac{\omega}{2\pi}`, '+'], [R`A_s\approx C_1R_2\,\omega_{p1}`, 'd', "mezi póly"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`A=\frac{pC_1R_2}{1+pb+p^2a}`, 'd', "uzlové napětí"], [R`\omega_{p1,2}=\frac{b\mp\sqrt{b^2-4a}}{2a}`, '+', "kořeny 1 + pb + p²a"], [R`f=\frac{\omega}{2\pi}`, '+'], [R`A_s\approx C_1R_2\,\omega_{p1}`, 'd', "mezi póly"]],
       title: "RC článek 6: pásmová propust s kvadratickým jmenovatelem",
       task: "Odvoď přenos A = V_out/V_in tohoto RC článku. Urči kmitočty pólů a nuly a přenos A_s v pásmu mezi póly.",
       given: ["R1 = 10 kΩ, C1 = 10 nF (sériová větev)", "R2 = 50 kΩ ∥ C2 = 50 nF (k zemi)"],
@@ -2009,7 +2009,7 @@ window.MPC = [
     },
     {
       id: "k7", num: "K7", kind: "Zesilovač BJT", src: "RC_EXPLAIN", page: 18, img: "img/k7.png", w: 1124, h: 818, plot: "img/k7-plot.jpg", pw: 1100, ph: 1351,
-      tk: [[R`I_c=\frac{V_B-V_{BE}}{R_e}`, 'd', "pracovní bod"], [R`r_e=\frac{1}{g_m}=\frac{V_T}{I_C}`, 'T', "převrácené $g_m$"], [R`A=\frac{R_c}{r_e+R_e}\cdot\frac{1+pC_eR_e}{1+pC_e\frac{R_er_e}{R_e+r_e}}`, '+', "C na emitoru: nula od $R_e$, pól od $R_e ∥ r_e$"], [R`R_o=\frac{nV_T}{I_o}`, '+', "výstupní odpor zdroje proudu"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`I_c=\frac{V_B-V_{BE}}{R_e}`, 'd', "pracovní bod"], [R`r_e=\frac{1}{g_m}=\frac{V_T}{I_C}`, 'T', "převrácené $g_m$"], [R`A=\frac{R_c}{r_e+R_e}\cdot\frac{1+pC_eR_e}{1+pC_e\frac{R_er_e}{R_e+r_e}}`, '+', "C na emitoru: nula od $R_e$, pól od $R_e ∥ r_e$"], [R`R_o=\frac{nV_T}{I_o}`, '+', "výstupní odpor zdroje proudu"]],
       title: "Zesilovač se společným emitorem a kondenzátorem C_e",
       task: "Spočítej pracovní bod a kmitočtovou charakteristiku zisku tohoto jednotranzistorového zesilovače: kmitočet nuly a pólu, zisk pro f ≪ f_z a f ≫ f_p a výstupní impedanci. Kapacita C_i je tak velká, že v celém pásmu představuje zkrat.",
       given: ["V_c = 3 V", "R_B = 2,04 MΩ, R_A = 960 kΩ", "V_BE = 0,65 V", "R_e = 78 kΩ, C_e = 15 nF", "R_c = 130 kΩ", "R_i = 450 kΩ, V_GS = 0,75 V", "Mo: slabá inverze, n = 2,2"],
@@ -2050,7 +2050,7 @@ window.MPC = [
     },
     {
       id: "k8", num: "K8", kind: "Zesilovač MOS", src: "RC_EXPLAIN", page: 20, img: "img/k8.png", w: 1072, h: 1007, plot: "img/k8-plot.jpg", pw: 1100, ph: 1383,
-      tk: [[R`I_d=\frac{V_G-V_{GS}}{R_s}`, 'd', "pracovní bod"], [R`r_s=\frac{1}{g_m}=\frac{nV_T}{I_D}`, 'T', "převrácené $g_m$, slabá inverze"], [R`A=\frac{R_c}{r_s+R_s}\cdot\frac{1+pC_sR_s}{1+pC_s\frac{r_sR_s}{r_s+R_s}}`, '+', "C na sourci: nula od $R_s$, pól od $R_s ∥ r_s$"], [R`R_o=\frac{nV_T}{I_o}`, '+', "výstupní odpor zdroje proudu"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`I_d=\frac{V_G-V_{GS}}{R_s}`, 'd', "pracovní bod"], [R`r_s=\frac{1}{g_m}=\frac{nV_T}{I_D}`, 'T', "převrácené $g_m$, slabá inverze"], [R`A=\frac{R_c}{r_s+R_s}\cdot\frac{1+pC_sR_s}{1+pC_s\frac{r_sR_s}{r_s+R_s}}`, '+', "C na sourci: nula od $R_s$, pól od $R_s ∥ r_s$"], [R`R_o=\frac{nV_T}{I_o}`, '+', "výstupní odpor zdroje proudu"]],
       title: "Zesilovač s MOS ve slabé inverzi, C_s a C_c",
       task: "Spočítej kmitočtovou charakteristiku zisku tohoto zesilovače s MOS tranzistorem ve slabé inverzi: kmitočty nul a pólů, zisk ve třech oblastech, kde nezávisí na kmitočtu, a výstupní impedanci.",
       given: ["V_c = 3 V", "R_B = 4 MΩ, R_A = 2 MΩ", "V_GS = 0,6 V, n = 2,2", "R_s = 80 kΩ, C_s = 2 µF", "R_c1 = 80 kΩ, R_c2 = 50 kΩ, C_c = 400 pF", "R_i = 480 kΩ"],
@@ -2103,7 +2103,7 @@ window.MPC = [
     },
     {
       id: "k9", num: "K9", kind: "Diferenční stupeň", src: "RC_EXPLAIN", page: 24, img: "img/k9.png", w: 1109, h: 1106, plot: "img/k9-plot.jpg", pw: 1100, ph: 1346,
-      tk: [[R`r_e=\frac{V_T}{I_{SS}/2}`, 'T', "jeden tranzistor dif. páru"], [R`C_e\ \text{mezi emitory}\Rightarrow 2C_e\ \text{na zem}`, '+', "polovina stupně"], [R`A=\frac{R_c}{r_e+R_e}\cdot\frac{1+2pC_eR_e}{1+2pC_e\frac{R_er_e}{R_e+r_e}}`, 'd']],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`r_e=\frac{V_T}{I_{SS}/2}`, 'T', "jeden tranzistor dif. páru"], [R`C_e\ \text{mezi emitory}\Rightarrow 2C_e\ \text{na zem}`, '+', "polovina stupně"], [R`A=\frac{R_c}{r_e+R_e}\cdot\frac{1+2pC_eR_e}{1+2pC_e\frac{R_er_e}{R_e+r_e}}`, 'd']],
       title: "Diferenční stupeň s C_e mezi emitory",
       task: "Spočítej kmitočtovou charakteristiku zisku diferenčního stupně: kmitočet nuly a pólu a zisk pro f ≪ f_z a f ≫ f_p.",
       given: ["V_c = 3 V", "R_i = 300 kΩ, V_GS = 0,6 V", "R_c = 130 kΩ", "R_e = 50 kΩ v každém emitoru", "C_e = 10 nF mezi emitory"],
@@ -2144,7 +2144,7 @@ window.MPC = [
     },
     {
       id: "k10", num: "K10", kind: "Diferenční stupeň", src: "RC_EXPLAIN", page: 26, img: "img/k10.png", w: 1057, h: 955, plot: "img/k10-plot.jpg", pw: 1100, ph: 1253,
-      tk: [[R`r_s=\frac{nV_T}{I_{SS}/2}`, 'T', "slabá inverze"], [R`C_e\ \text{mezi emitory}\Rightarrow 2C_e\ \text{na zem}`, '+', "polovina stupně"], [R`Y=\frac{R_c}{1+pCR_c}`, 'd', "C jen na jednom $R_c$"], [R`f_p=\frac{1}{2\pi RC},\;f_z=2f_p`, '+', "doublet"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`r_s=\frac{nV_T}{I_{SS}/2}`, 'T', "slabá inverze"], [R`C_e\ \text{mezi emitory}\Rightarrow 2C_e\ \text{na zem}`, '+', "polovina stupně"], [R`Y=\frac{R_c}{1+pCR_c}`, 'd', "C jen na jednom $R_c$"], [R`f_p=\frac{1}{2\pi RC},\;f_z=2f_p`, '+', "doublet"]],
       title: "Diferenční stupeň MOS s C_e a C na jednom R_c",
       task: "Spočítej kmitočtovou charakteristiku zisku diferenčního stupně s MOS tranzistory ve slabé inverzi: kmitočty nul a pólů a zisk v oblastech, kde nezávisí na kmitočtu.",
       given: ["V_c = 3 V", "R_i = 3 MΩ, V_GS = 0,6 V", "R_c = 700 kΩ, C = 10 pF jen u Q1", "R_e = 500 kΩ, C_e = 5 nF", "slabá inverze, n = 2,05"],
@@ -2197,7 +2197,7 @@ window.MPC = [
     },
     {
       id: "k11", num: "K11", kind: "Bonus", src: "RC_EXPLAIN", page: 28, img: "img/k11.png", w: 1600, h: 1118,
-      tk: [[R`\frac{V_b}{V_i}=\frac{pC_1R_2}{1+pC_1(R_1+R_2)}`, 'd', "vstupní horní propust"], [R`r_e=\frac{V_T}{I_{SS}/2}`, 'T'], [R`f_p=\frac{1}{2\pi RC},\;f_z=2f_p`, '+', "doublet od $C_2$ na jednom $R_c$"], [R`|A|=A_p\frac{f/f_p}{\sqrt{1+(f/f_p)^2}}`, '+', "pod pólem horní propusti"]],
+      tk: [[R`Z_C=\frac{1}{pC},\;\;Z_L=pL`, '+', "p = jω"], [R`\frac{V_b}{V_i}=\frac{pC_1R_2}{1+pC_1(R_1+R_2)}`, 'd', "vstupní horní propust"], [R`r_e=\frac{V_T}{I_{SS}/2}`, 'T'], [R`f_p=\frac{1}{2\pi RC},\;f_z=2f_p`, '+', "doublet od $C_2$ na jednom $R_c$"], [R`|A|=A_p\frac{f/f_p}{\sqrt{1+(f/f_p)^2}}`, '+', "pod pólem horní propusti"]],
       title: "Bonus: vstupní RC článek a diferenční stupeň s C2",
       task: "Spočítej a zkonstruuj kmitočtovou charakteristiku zisku tohoto zesilovače v pásmu 1 mHz – 10 kHz: celkový vzorec pro závislost zisku na kmitočtu, kmitočty přenosových pólů a nul a zisk v oblastech, kde je nezávislý na kmitočtu. β → ∞. Podklady k tomuto příkladu řešení nemají, postup níže jsem spočítal sám.",
       given: ["R1 = 1 MΩ, C1 = 10 µF", "R2 = 100 kΩ", "R_c = 2,7 MΩ (obě), C2 = 1 nF u jednoho", "R_i = 1,7 MΩ, V_GS = 0,6 V", "zdroje 3 V a 1 V v sérii"],
