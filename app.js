@@ -461,7 +461,7 @@ function renderExample() {
   var solo = !p.nai;
   return '<div class="sheet">' + headHtml(p) + taskHtml(p) +
     '<div class="grid ' + (solo ? "solo" : "") + '"><figure class="schem"><div class="paper' + (st.tool ? " inking " + st.tool : "") + (zcur().z > 1 ? " zoomed" : "") + '" style="--ar:' + p.w + "/" + p.h + '"><div class="zoom" style="' + zStyle(zcur()) + '"><img alt="Schéma příkladu ' + p.id + '" src="' + p.img + '" width="' + p.w + '" height="' + p.h + '" draggable="false">' + o.svg + "</div>" + inkBar() +
-      '<button type="button" class="zbadge" data-zreset title="Zpět na celé schéma">' + Math.round(zcur().z * 100) + " %</button></div>" +
+      '<button type="button" class="zbadge" data-zreset title="Zpět na celé schéma">' + Math.round(zcur().z * 100) + " %</button>" + fsBtn() + "</div>" +
     '<figcaption class="legend">' + lg + "</figcaption>" +
     (p.nai && mode !== "exam" ? '<div class="opts">' +
       (mode === "learn" ? '<label><input type="checkbox" id="allhl" ' + (st.allhl ? "checked " : "") + (st.clean ? "disabled" : "") + "> zvýraznit vše najednou</label>" : "") +
@@ -676,6 +676,7 @@ function render(focusSel) {
   /* another problem, or leaving the page it is on, makes a shown line stale (Vzory / tahák / Bloky open on top of a problem keep it) */
   if (HON && (HON.pg.slice(0, 3) === "ex:" ? st.view === "ex" && HON.pg !== hlPage() : st.view !== HON.pg)) HON = null;
   markHl();
+  fsApply();
   rtAfterRender();
   if (!RT) drawShared();
 }
@@ -1266,7 +1267,7 @@ function zStart(pap) {
 document.addEventListener("pointerdown", function (e) {
   if (st.view !== "ex") return;
   var pap = e.target.closest && e.target.closest("#main .paper");
-  if (!pap || e.target.closest(".ink-bar, .pin, .zbadge")) return;
+  if (!pap || e.target.closest(".ink-bar, .pin, .zbadge, .zfs")) return;
   if (e.pointerType === "touch") { /* every finger on the schematic is counted, also one that is drawing */
     zPts[e.pointerId] = { x: e.clientX, y: e.clientY };
     var n = Object.keys(zPts).length;
@@ -1300,12 +1301,38 @@ document.addEventListener("pointerup", zEnd);
 document.addEventListener("pointercancel", zEnd);
 document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-zreset]")) zSet({ z: 1, x: 0, y: 0 }); });
 
+/* ---------- schematic over the whole window (the browser window itself stays as it is): the paper goes into the
+   browser's top layer as a manual popover, which lifts it out of main's container and its stacking. Drawing, notes and
+   zoom keep working since they all go by the paper's own box. Shared with the room. ---------- */
+var FS = false, FS_OK = !!HTMLElement.prototype.showPopover; /* shortcut: no button in browsers without popover (pre-2024) */
+function fsBtn() {
+  if (!FS_OK) return "";
+  var d = FS ? "M9 4v5H4M15 4v5h5M20 15h-5v5M4 15h5v5" : "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5";
+  return '<button type="button" class="zfs" data-zfs aria-pressed="' + FS + '" title="' + (FS ? "Zpět (Esc), pro všechny" : "Schéma přes celé okno, pro všechny") + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg></button>';
+}
+function fsApply() {
+  var pap = document.querySelector("#main .paper"), on = FS && st.view === "ex";
+  if (!pap || !FS_OK) return;
+  pap.classList.toggle("fs", on);
+  var b = pap.querySelector(".zfs");
+  if (b) b.outerHTML = fsBtn();
+  if (on) { pap.setAttribute("popover", "manual"); if (!pap.matches(":popover-open")) pap.showPopover(); }
+  else pap.removeAttribute("popover"); /* removing the attribute also closes it */
+}
+function fsSet(on, mine) {
+  if (on === FS) return;
+  FS = on; fsApply();
+  if (mine && RT) rtSend("fs", { on: on });
+}
+document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-zfs]")) fsSet(!FS, true); });
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && FS && st.view === "ex") fsSet(false, true); });
+
 var inkNow = null;
 document.addEventListener("pointerdown", function (e) {
   var tip = eraserTip(e);
   if (zG || st.view !== "ex" || (!st.tool && !tip) || (e.button > 0 && !tip)) return;
   var pap = e.target.closest && e.target.closest("#main .paper");
-  if (!pap || e.target.closest(".ink-bar, .pin")) return;
+  if (!pap || e.target.closest(".ink-bar, .pin, .zbadge, .zfs")) return;
   e.preventDefault();
   LASTSURF = "schem";
   try { pap.setPointerCapture(e.pointerId); } catch (x) {} /* keeps the line going when the pointer leaves the schematic */
@@ -1529,6 +1556,7 @@ function rtRecv(msg, pid) {
   if (msg.t === "fshow" && d && Number.isInteger(d.i) && d.i >= -1 && d.i < 500) showFormula(d.i);
   if (msg.t === "erase" && typeof d === "string" && INK[d]) { delete INK[d]; drawShared(); }
   if (msg.t === "zoom") zMerge(d);
+  if (msg.t === "fs" && d && typeof d.on === "boolean") fsSet(d.on);
   if (msg.t === "zkop" || msg.t === "zkt" || msg.t === "zkc" || msg.t === "zkchk") zkRecv(msg.t, d, msg.f);
   if (msg.t === "hl" && d && typeof d.pg === "string" && /^(ex:[\w.\-]{1,16}|vzory|bloky|tahak)$/.test(d.pg) && (d.k === null || (typeof d.k === "string" && /^[\w.\-]{1,40}$/.test(d.k)))) showHl(d);
   if (JSON.stringify(rtCount()) !== before) rtUi();
@@ -1646,7 +1674,7 @@ document.addEventListener("pointermove", function (e) {
 document.addEventListener("dblclick", function (e) {
   if (!RT || st.view !== "ex") return;
   var pap = e.target.closest && e.target.closest("#main .paper");
-  if (!pap || st.tool || e.target.closest(".pin, .ink-bar, .zbadge")) return;
+  if (!pap || st.tool || e.target.closest(".pin, .ink-bar, .zbadge, .zfs")) return;
   var r = zEl(pap).getBoundingClientRect();
   var t = window.prompt("Poznámka k tomuto místu (uvidí ji všichni v místnosti, může být prázdná):", "");
   if (t === null) return;
